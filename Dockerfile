@@ -47,6 +47,8 @@ RUN apk add --no-cache \
     libseccomp \
     libslirp \
     libaio \
+    libbz2 \
+    dtc \
     bash \
     iproute2 \
     ovmf
@@ -57,13 +59,13 @@ COPY --from=builder /tmp/qemu-install/usr/bin/qemu-img /usr/bin/
 COPY --from=builder /tmp/qemu-install/usr/share/qemu/ /usr/share/qemu/
 
 # macOS files
-COPY BaseSystem.img /opt/macos/BaseSystem.img
-COPY OpenCore.qcow2 /opt/macos/OpenCore.qcow2
+COPY sequoia_recovery.img /opt/macos/recovery.img
+COPY OpenCore.img /opt/macos/OpenCore.img
 COPY launch.sh /opt/macos/launch.sh
 RUN chmod +x /opt/macos/launch.sh
 
 WORKDIR /opt/macos
 
-ENV RAM=4 SMP=4 CORES=4 NETWORKING=vmxnet3 IMAGE_PATH=/opt/macos/mac_hdd_ng.img EXTRA=
+ENV RAM=4 SMP=4 CORES=4 NETWORKING=vmxnet3 IMAGE_PATH=/opt/macos/mac_hdd_ng.img DISK_SIZE=256G EXTRA=
 
 CMD ["/opt/macos/launch.sh"]

@@ -4,12 +4,12 @@ set -eu
 cd /opt/macos
 
 # Detect install vs running mode
-DISK_SIZE=$(stat -c%s "${IMAGE_PATH}" 2>/dev/null || echo 0)
+CURRENT_SIZE=$(stat -c%s "${IMAGE_PATH}" 2>/dev/null || echo 0)
 INSTALL_MEDIA=""
-if [[ "${DISK_SIZE}" -lt 1048576 ]]; then
+if [[ "${CURRENT_SIZE}" -lt 1048576 ]]; then
     echo "Empty disk — install mode"
-    qemu-img create -f raw "${IMAGE_PATH}" 256G
-    INSTALL_MEDIA="-drive id=InstallMedia,if=none,file=/opt/macos/BaseSystem.img,format=qcow2 -device ide-hd,bus=sata.3,drive=InstallMedia"
+    qemu-img create -f raw "${IMAGE_PATH}" "${DISK_SIZE:-256G}"
+    INSTALL_MEDIA="-drive id=InstallMedia,if=none,file=/opt/macos/recovery.img,format=raw -device ide-hd,bus=sata.3,drive=InstallMedia"
 else
     echo "Boot mode"
 fi
@@ -44,7 +44,7 @@ exec qemu-system-x86_64 -m "${RAM:-4}000" \
     -drive if=pflash,format=raw,file=/usr/share/OVMF/OVMF_VARS.fd \
     -smbios type=2 \
     -device ich9-ahci,id=sata \
-    -drive id=OpenCoreBoot,if=none,snapshot=on,format=qcow2,file=/opt/macos/OpenCore.qcow2 \
+    -drive id=OpenCoreBoot,if=none,snapshot=on,format=raw,file=/opt/macos/OpenCore.img \
     -device ide-hd,bus=sata.2,drive=OpenCoreBoot \
     ${INSTALL_MEDIA} \
     -drive id=MacHDD,if=none,file="${IMAGE_PATH}",format=raw,cache=none,aio=native \
