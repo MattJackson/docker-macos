@@ -3,6 +3,15 @@ set -eu
 
 cd /opt/macos
 
+# Reset NVRAM if OpenCore image changed (prevents stale SMBIOS/settings)
+CURRENT_MD5=$(md5sum /opt/macos/OpenCore.img | cut -d' ' -f1)
+LAST_MD5=$(cat /data/.opencore-md5 2>/dev/null || echo "")
+if [ "$CURRENT_MD5" != "$LAST_MD5" ]; then
+    echo "OpenCore changed — resetting NVRAM"
+    cp /usr/share/OVMF/OVMF_VARS.clean.fd /usr/share/OVMF/OVMF_VARS.fd
+    echo "$CURRENT_MD5" > /data/.opencore-md5
+fi
+
 # Detect install vs running mode
 CURRENT_SIZE=$(stat -c%s "${IMAGE_PATH}" 2>/dev/null || echo 0)
 INSTALL_MEDIA=""
@@ -42,6 +51,9 @@ exec qemu-system-x86_64 -m "${RAM:-4}000" \
     -device 'isa-applesmc,osk=ourhardworkbythesewordsguardedpleasedontsteal(c)AppleComputerInc' \
     -drive if=pflash,format=raw,readonly=on,file=/usr/share/OVMF/OVMF_CODE.fd \
     -drive if=pflash,format=raw,file=/usr/share/OVMF/OVMF_VARS.fd \
+    -global ICH9-LPC.disable_s3=1 \
+    -global ICH9-LPC.disable_s4=1 \
+    -global ICH9-LPC.acpi-pci-hotplug-with-bridge-support=off \
     -smbios type=2 \
     -device ich9-ahci,id=sata \
     -drive id=OpenCoreBoot,if=none,format=raw,file=/opt/macos/OpenCore.img \
