@@ -6,3 +6,6 @@ mac_hdd_ng.img
 *.img
 *.qcow2
 .env
+kexts/*/build/
+kexts/CPUFriend/Tools/CPUFriendDataProvider.kext
+*.o
