@@ -1,0 +1,28 @@
+name: Build VMsvga2 kext
+
+on:
+  push:
+    paths:
+      - 'kexts/VMsvga2/**'
+  workflow_dispatch:
+
+jobs:
+  build:
+    runs-on: macos-13
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Build VMsvga2
+        working-directory: kexts/VMsvga2
+        run: |
+          xcodebuild -project VMsvga2.xcodeproj \
+            -target VMsvga2 \
+            -configuration Release \
+            ARCHS=x86_64 \
+            MACOSX_DEPLOYMENT_TARGET=15.0
+
+      - name: Upload kext
+        uses: actions/upload-artifact@v4
+        with:
+          name: VMsvga2.kext
+          path: kexts/VMsvga2/build/Release/VMsvga2.kext
