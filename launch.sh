@@ -9,7 +9,7 @@ INSTALL_MEDIA=""
 if [[ "${CURRENT_SIZE}" -lt 1048576 ]]; then
     echo "Empty disk — install mode"
     qemu-img create -f raw "${IMAGE_PATH}" "${DISK_SIZE:-256G}"
-    INSTALL_MEDIA="-drive id=InstallMedia,if=none,file=/opt/macos/recovery.img,format=raw,cache=unsafe -device virtio-blk-pci,drive=InstallMedia"
+    INSTALL_MEDIA="-drive id=InstallMedia,if=none,file=/opt/macos/recovery.img,format=raw -device ide-hd,bus=sata.3,drive=InstallMedia"
 else
     echo "Boot mode"
 fi
@@ -33,7 +33,7 @@ exec 3<>"${TAP_DEV}"
 
 echo "Starting macOS VM (MAC=${MAC})..."
 exec qemu-system-x86_64 -m "${RAM:-4}000" \
-    -cpu host,vendor=GenuineIntel,vmware-cpuid-freq=on \
+    -cpu "${CPU_MODEL:-host}",vendor=GenuineIntel,vmware-cpuid-freq=on \
     -machine q35,accel=kvm \
     -smp "${SMP:-4}",cores="${CORES:-4}" \
     -device qemu-xhci,id=xhci \
@@ -43,13 +43,14 @@ exec qemu-system-x86_64 -m "${RAM:-4}000" \
     -drive if=pflash,format=raw,readonly=on,file=/usr/share/OVMF/OVMF_CODE.fd \
     -drive if=pflash,format=raw,file=/usr/share/OVMF/OVMF_VARS.fd \
     -smbios type=2 \
-    -drive id=OpenCoreBoot,if=none,format=raw,file=/opt/macos/OpenCore.img,cache=unsafe,readonly=on \
-    -device virtio-blk-pci,drive=OpenCoreBoot \
+    -device ich9-ahci,id=sata \
+    -drive id=OpenCoreBoot,if=none,format=raw,file=/opt/macos/OpenCore.img \
+    -device ide-hd,bus=sata.2,drive=OpenCoreBoot \
     ${INSTALL_MEDIA} \
     -drive id=MacHDD,if=none,file="${IMAGE_PATH}",format=raw,cache=none,aio=native \
-    -device virtio-blk-pci,drive=MacHDD \
+    -device ide-hd,bus=sata.4,drive=MacHDD \
     -netdev tap,id=net0,fd=3 \
-    -device virtio-net-pci,netdev=net0,mac="${MAC}" \
+    -device vmxnet3,netdev=net0,id=net0,mac="${MAC}" \
     -display none \
     -vnc 127.0.0.1:1 \
     -vga vmware \
