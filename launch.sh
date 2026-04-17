@@ -9,7 +9,7 @@ INSTALL_MEDIA=""
 if [[ "${CURRENT_SIZE}" -lt 1048576 ]]; then
     echo "Empty disk — install mode"
     qemu-img create -f raw "${IMAGE_PATH}" "${DISK_SIZE:-256G}"
-    INSTALL_MEDIA="-drive id=InstallMedia,if=none,file=/opt/macos/recovery.img,format=raw -device virtio-blk-pci,drive=InstallMedia"
+    INSTALL_MEDIA="-drive id=InstallMedia,if=none,file=/opt/macos/recovery.img,format=raw -device ide-hd,bus=sata.3,drive=InstallMedia"
 else
     echo "Boot mode"
 fi
@@ -50,7 +50,7 @@ exec qemu-system-x86_64 -m "${RAM:-4}000" \
     -drive id=MacHDD,if=none,file="${IMAGE_PATH}",format=raw,cache=none,aio=native \
     -device virtio-blk-pci,drive=MacHDD \
     -netdev tap,id=net0,fd=3 \
-    -device vmxnet3,netdev=net0,id=net0,mac="${MAC}" \
+    -device virtio-net-pci,netdev=net0,mac="${MAC}" \
     -display none \
     -vnc 127.0.0.1:1 \
     -vga vmware \
