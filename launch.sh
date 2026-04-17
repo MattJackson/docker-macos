@@ -3,13 +3,11 @@ set -eu
 
 cd /opt/macos
 
-# Reset NVRAM if OpenCore image changed (prevents stale SMBIOS/settings)
-CURRENT_MD5=$(md5sum /opt/macos/OpenCore.img | cut -d' ' -f1)
-LAST_MD5=$(cat /data/.opencore-md5 2>/dev/null || echo "")
-if [ "$CURRENT_MD5" != "$LAST_MD5" ]; then
-    echo "OpenCore changed — resetting NVRAM"
+# Reset NVRAM if requested (touch /data/.reset-nvram to trigger)
+if [ -f /data/.reset-nvram ]; then
+    echo "NVRAM reset requested"
     cp /usr/share/OVMF/OVMF_VARS.clean.fd /usr/share/OVMF/OVMF_VARS.fd
-    echo "$CURRENT_MD5" > /data/.opencore-md5
+    rm -f /data/.reset-nvram
 fi
 
 # Detect install vs running mode

@@ -9,3 +9,6 @@ mac_hdd_ng.img
 kexts/*/build/
 kexts/CPUFriend/Tools/CPUFriendDataProvider.kext
 *.o
+kexts/deps/
+kexts/*/build/
+oc-check.bin
