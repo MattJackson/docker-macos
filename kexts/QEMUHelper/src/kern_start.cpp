@@ -1,80 +1,46 @@
-#include <Headers/plugin_start.hpp>
-#include <Headers/kern_api.hpp>
-#include <Headers/kern_patcher.hpp>
-#include <Headers/kern_util.hpp>
-
 #include <IOKit/IOLib.h>
 #include <IOKit/IOService.h>
+#include <mach/mach_types.h>
 
-#define MODULE_SHORT "qemuhelp"
-
-// IOService class required by Lilu for plugin discovery
-OSDefineMetaClassAndStructors(QEMUHelper, IOService)
-
-bool ADDPR(startSuccess) = false;
-
-IOService *QEMUHelper::probe(IOService *provider, SInt32 *score) {
-    auto service = IOService::probe(provider, score);
-    return ADDPR(startSuccess) ? service : nullptr;
-}
-
-bool QEMUHelper::start(IOService *provider) {
-    if (!IOService::start(provider))
-        return false;
-    return ADDPR(startSuccess);
-}
-
-void QEMUHelper::stop(IOService *provider) {
-    IOService::stop(provider);
-}
-
-// Lilu plugin logic
-static const char *kextIONDRVPath[] = {"/System/Library/Extensions/IONDRVSupport.kext/IONDRVSupport"};
-
-static KernelPatcher::KextInfo kextList[] = {
-    {"com.apple.iokit.IONDRVSupport", kextIONDRVPath, arrsize(kextIONDRVPath), {true}, {}, KernelPatcher::KextInfo::Unloaded}
-};
-
-static void processKext(void *user, KernelPatcher &patcher, size_t index, mach_vm_address_t address, size_t size) {
-    if (kextList[0].loadIndex != index) return;
-
-    SYSLOG(MODULE_SHORT, "IONDRVSupport loaded, patching VRAM");
-
-    static const uint8_t find[] = {0x00, 0x00, 0x70, 0x00};
-    static const uint8_t repl[] = {0x00, 0x00, 0x00, 0x10};
-
-    KernelPatcher::LookupPatch vramPatch = {
-        &kextList[0],
-        find, repl,
-        sizeof(find),
-        0
-    };
-
-    patcher.applyLookupPatch(&vramPatch);
-    if (patcher.getError() != KernelPatcher::Error::NoError) {
-        SYSLOG(MODULE_SHORT, "VRAM patch failed: %d", patcher.getError());
-        patcher.clearError();
-    } else {
-        SYSLOG(MODULE_SHORT, "VRAM patched: 7MB -> 256MB");
+class QEMUHelper : public IOService {
+    OSDeclareDefaultStructors(QEMUHelper)
+public:
+    static bool framebufferMatched(void *target, void *refCon, IOService *newService, IONotifier *notifier) {
+        IOLog("QEMUHelper: framebuffer appeared! class=%s\n", newService->getMetaClass()->getClassName());
+        OSNumber *vramSize = OSNumber::withNumber((uint64_t)268435456, 64);
+        if (vramSize) {
+            newService->setProperty("IOFBMemorySize", vramSize);
+            vramSize->release();
+            IOLog("QEMUHelper: IOFBMemorySize set to 256MB!\n");
+        }
+        return true;
     }
-}
 
-static void pluginStart() {
-    SYSLOG(MODULE_SHORT, "QEMUHelper starting");
-    lilu.onKextLoadForce(kextList, 1, processKext);
-}
+    bool start(IOService *provider) override {
+        IOLog("QEMUHelper::start called!\n");
+        if (!IOService::start(provider)) return false;
 
-static const char *bootargOff[] = {"-qemuhelperoff"};
-static const char *bootargDebug[] = {"-qemuhelperdbg"};
-
-PluginConfiguration ADDPR(config) {
-    xStringify(PRODUCT_NAME),
-    parseModuleVersion(xStringify(MODULE_VERSION)),
-    LiluAPI::AllowNormal | LiluAPI::AllowInstallerRecovery | LiluAPI::AllowSafeMode,
-    bootargOff, arrsize(bootargOff),
-    bootargDebug, arrsize(bootargDebug),
-    nullptr, 0,
-    KernelVersion::Sequoia,
-    KernelVersion::Sequoia,
-    pluginStart
+        // Register notification for when IONDRVFramebuffer appears
+        IOLog("QEMUHelper: registering notification for IOFramebuffer\n");
+        OSDictionary *matching = IOService::serviceMatching("IOFramebuffer");
+        if (matching) {
+            IONotifier *notifier = addMatchingNotification(
+                gIOFirstMatchNotification,
+                matching,
+                &QEMUHelper::framebufferMatched,
+                this);
+            if (notifier) {
+                IOLog("QEMUHelper: notification registered, waiting for framebuffer...\n");
+            } else {
+                IOLog("QEMUHelper: failed to register notification\n");
+            }
+        }
+        return true;
+    }
+    void stop(IOService *provider) override {
+        IOLog("QEMUHelper::stop called\n");
+        IOService::stop(provider);
+    }
 };
+
+OSDefineMetaClassAndStructors(QEMUHelper, IOService)

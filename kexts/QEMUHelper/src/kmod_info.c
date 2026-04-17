@@ -1,5 +1,7 @@
 #include <mach/mach_types.h>
+#include <libkern/OSKextLib.h>
 
+// Forward declarations — Lilu's IOService subclass provides these
 extern kern_return_t _start(kmod_info_t *ki, void *data);
 extern kern_return_t _stop(kmod_info_t *ki, void *data);
 
