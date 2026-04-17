@@ -1,9 +1,34 @@
 #include <Headers/plugin_start.hpp>
 #include <Headers/kern_api.hpp>
 #include <Headers/kern_patcher.hpp>
+#include <Headers/kern_util.hpp>
+
+#include <IOKit/IOLib.h>
+#include <IOKit/IOService.h>
 
 #define MODULE_SHORT "qemuhelp"
 
+// IOService class required by Lilu for plugin discovery
+OSDefineMetaClassAndStructors(QEMUHelper, IOService)
+
+bool ADDPR(startSuccess) = false;
+
+IOService *QEMUHelper::probe(IOService *provider, SInt32 *score) {
+    auto service = IOService::probe(provider, score);
+    return ADDPR(startSuccess) ? service : nullptr;
+}
+
+bool QEMUHelper::start(IOService *provider) {
+    if (!IOService::start(provider))
+        return false;
+    return ADDPR(startSuccess);
+}
+
+void QEMUHelper::stop(IOService *provider) {
+    IOService::stop(provider);
+}
+
+// Lilu plugin logic
 static const char *kextIONDRVPath[] = {"/System/Library/Extensions/IONDRVSupport.kext/IONDRVSupport"};
 
 static KernelPatcher::KextInfo kextList[] = {
@@ -15,7 +40,6 @@ static void processKext(void *user, KernelPatcher &patcher, size_t index, mach_v
 
     SYSLOG(MODULE_SHORT, "IONDRVSupport loaded, patching VRAM");
 
-    // Search for 0x700000 (7MB) as mov immediate and replace with 0x10000000 (256MB)
     static const uint8_t find[] = {0x00, 0x00, 0x70, 0x00};
     static const uint8_t repl[] = {0x00, 0x00, 0x00, 0x10};
 
