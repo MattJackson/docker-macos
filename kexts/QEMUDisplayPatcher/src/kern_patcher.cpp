@@ -2,7 +2,8 @@
 //  kern_patcher.cpp
 //  QEMUDisplayPatcher
 //
-//  onPatcherLoad (consistent) + loadKinfo + routeMultiple on kext idx.
+//  onKextLoad for IONDRVSupport. When it fires, all hooks work.
+//  Investigating consistency.
 //
 
 #include <Headers/kern_api.hpp>
@@ -32,8 +33,8 @@ static IOReturn (*orgGetDDCBlock)(void *, int32_t, uint32_t, uint32_t, uint32_t,
 static IOReturn (*orgSetGammaTable)(void *, uint32_t, uint32_t, uint32_t, void *) = nullptr;
 
 static IOReturn patchedEnableController(void *that) {
-    IOLog("QDP: enableController\n");
-    return orgEnableController ? orgEnableController(that) : 0;
+    IOLog("QDP: enableController (no original — trampoline crashes)\n");
+    return 0;
 }
 
 static bool patchedHasDDCConnect(void *that, int32_t idx) {
@@ -58,29 +59,17 @@ static const char *kextPath[] {
     "/System/Library/Extensions/IONDRVSupport.kext/IONDRVSupport"
 };
 
-static void onPatcherLoad(void *user, KernelPatcher &patcher) {
-    IOLog("QDP: onPatcherLoad\n");
+static KernelPatcher::KextInfo kextInfo {
+    "com.apple.iokit.IONDRVSupport",
+    kextPath, 1,
+    {true, false, false, false, true}, // Loaded=true, FSFallback=true
+    {},
+    KernelPatcher::KextInfo::Unloaded
+};
 
-    // Load IONDRVSupport kext info
-    size_t idx = patcher.loadKinfo(
-        "com.apple.iokit.IONDRVSupport",
-        kextPath, arrsize(kextPath),
-        false, false, true  // not kernel, not fsonly, fsfallback=true
-    );
+static void onKextLoad(void *user, KernelPatcher &patcher, size_t id, mach_vm_address_t slide, size_t size) {
+    IOLog("QDP: onKextLoad id=%lu\n", (unsigned long)id);
 
-    IOLog("QDP: loadKinfo=%lu err=%d\n", (unsigned long)idx, patcher.getError());
-    patcher.clearError();
-
-    if (idx == 0 || idx == (size_t)-1) {
-        IOLog("QDP: kinfo load failed\n");
-        return;
-    }
-
-    // Update running info
-    patcher.updateRunningInfo(idx, 0, 0);
-    patcher.clearError();
-
-    // Route
     KernelPatcher::RouteRequest reqs[] = {
         {"__ZN17IONDRVFramebuffer16enableControllerEv",
          patchedEnableController, orgEnableController},
@@ -91,17 +80,17 @@ static void onPatcherLoad(void *user, KernelPatcher &patcher) {
         {"__ZN17IONDRVFramebuffer13setGammaTableEjjjPv",
          patchedSetGammaTable, orgSetGammaTable},
     };
+    patcher.routeMultiple(id, reqs, arrsize(reqs), slide, size);
 
-    patcher.routeMultiple(idx, reqs, arrsize(reqs));
-    IOLog("QDP: routeMultiple err=%d\n", patcher.getError());
-    patcher.clearError();
-
-    // Check what actually got routed
-    IOLog("QDP: orgEnable=%p orgDDC=%p orgGamma=%p\n",
-          orgEnableController, orgHasDDCConnect, orgSetGammaTable);
+    if (patcher.getError() == KernelPatcher::Error::NoError)
+        IOLog("QDP: 4/4 routed\n");
+    else {
+        IOLog("QDP: err %d\n", patcher.getError());
+        patcher.clearError();
+    }
 }
 
 void pluginStart() {
     IOLog("QDP: pluginStart\n");
-    lilu.onPatcherLoadForce(onPatcherLoad);
+    lilu.onKextLoadForce(&kextInfo, 1, onKextLoad);
 }
