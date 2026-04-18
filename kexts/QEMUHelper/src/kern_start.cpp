@@ -24,58 +24,74 @@ class QEMUHelper : public IOService {
     IOWorkLoop *workLoop;
     int patchAttempts;
 
-    static void patchDisplay(IOService *fb) {
-        // VRAM: 256MB
+    // Set EDID on the framebuffer so AppleDisplay reads it
+    static void patchEDID(IOService *fb) {
+        OSData *edidData = OSData::withBytes(iMacEDID, sizeof(iMacEDID));
+        if (edidData) {
+            fb->setProperty("IODisplayEDID", edidData);
+            fb->setProperty("IODisplayEDIDOriginal", edidData);
+            edidData->release();
+        }
+        // Also set vendor/product directly on framebuffer
+        OSNumber *vendorID = OSNumber::withNumber((uint32_t)0x610, 32);
+        OSNumber *productID = OSNumber::withNumber((uint32_t)0xA034, 32);
+        if (vendorID) { fb->setProperty("DisplayVendorID", vendorID); vendorID->release(); }
+        if (productID) { fb->setProperty("DisplayProductID", productID); productID->release(); }
+    }
+
+    static void patchVRAM(IOService *fb) {
         OSNumber *vramSize = OSNumber::withNumber((uint64_t)268435456, 64);
         if (vramSize) {
             fb->setProperty("IOFBMemorySize", vramSize);
             vramSize->release();
         }
-
-        // EDID: iMac 27" identity
-        OSData *edidData = OSData::withBytes(iMacEDID, sizeof(iMacEDID));
-        if (edidData) {
-            fb->setProperty("IODisplayEDID", edidData);
-            edidData->release();
-        }
-
-        // Display identity: Apple iMac
-        OSNumber *vendorID = OSNumber::withNumber((uint32_t)0x610, 32);
-        OSNumber *productID = OSNumber::withNumber((uint32_t)0xA034, 32);
-        if (vendorID && productID) {
-            fb->setProperty("DisplayVendorID", vendorID);
-            fb->setProperty("DisplayProductID", productID);
-            vendorID->release();
-            productID->release();
-        }
     }
 
 public:
+    // Catch IODisplayConnect BEFORE AppleDisplay matches — inject EDID
+    static bool displayConnectMatched(void *target, void *refCon, IOService *newService, IONotifier *notifier) {
+        IOLog("QEMUHelper: IODisplayConnect appeared, injecting EDID\n");
+        // Get the parent framebuffer
+        IOService *fb = newService->getProvider();
+        if (fb) {
+            patchEDID(fb);
+            IOLog("QEMUHelper: EDID injected on framebuffer\n");
+        }
+        // Also set on the connect itself
+        OSData *edidData = OSData::withBytes(iMacEDID, sizeof(iMacEDID));
+        if (edidData) {
+            newService->setProperty("IODisplayEDID", edidData);
+            edidData->release();
+        }
+        return true;
+    }
+
+    // Catch framebuffer for VRAM patching (delayed)
     static bool framebufferMatched(void *target, void *refCon, IOService *newService, IONotifier *notifier) {
-        IOLog("QEMUHelper: framebuffer appeared! class=%s\n", newService->getMetaClass()->getClassName());
+        IOLog("QEMUHelper: framebuffer appeared\n");
         newService->retain();
         gFramebuffer = newService;
+        patchEDID(newService); // Set EDID early too
         QEMUHelper *self = (QEMUHelper *)target;
         if (self->timer) {
             self->timer->setTimeoutMS(5000);
-            IOLog("QEMUHelper: timer armed\n");
         }
         return true;
     }
 
     static void timerFired(OSObject *owner, IOTimerEventSource *sender) {
         if (!gFramebuffer) return;
-
         QEMUHelper *self = (QEMUHelper *)owner;
         self->patchAttempts++;
 
-        patchDisplay(gFramebuffer);
-        IOLog("QEMUHelper: display patched (attempt %d) — VRAM=256MB, EDID=iMac, Vendor=Apple\n", self->patchAttempts);
+        patchVRAM(gFramebuffer);
+        patchEDID(gFramebuffer);
+        IOLog("QEMUHelper: patched (attempt %d)\n", self->patchAttempts);
 
         if (self->patchAttempts < 5) {
             sender->setTimeoutMS(10000);
         } else {
-            IOLog("QEMUHelper: patching complete\n");
+            IOLog("QEMUHelper: complete\n");
         }
     }
 
@@ -90,12 +106,21 @@ public:
             if (timer) workLoop->addEventSource(timer);
         }
 
-        OSDictionary *matching = IOService::serviceMatching("IOFramebuffer");
-        if (matching) {
-            addMatchingNotification(gIOPublishNotification, matching,
+        // Watch for framebuffer (VRAM patch)
+        OSDictionary *fbMatch = IOService::serviceMatching("IOFramebuffer");
+        if (fbMatch) {
+            addMatchingNotification(gIOPublishNotification, fbMatch,
                 &QEMUHelper::framebufferMatched, this);
-            IOLog("QEMUHelper: watching for framebuffer\n");
         }
+
+        // Watch for display connect (EDID injection — before AppleDisplay)
+        OSDictionary *dcMatch = IOService::serviceMatching("IODisplayConnect");
+        if (dcMatch) {
+            addMatchingNotification(gIOFirstMatchNotification, dcMatch,
+                &QEMUHelper::displayConnectMatched, this);
+        }
+
+        IOLog("QEMUHelper: watching for framebuffer + display connect\n");
         return true;
     }
 
@@ -106,10 +131,7 @@ public:
             timer->release();
             timer = nullptr;
         }
-        if (gFramebuffer) {
-            gFramebuffer->release();
-            gFramebuffer = nullptr;
-        }
+        if (gFramebuffer) { gFramebuffer->release(); gFramebuffer = nullptr; }
         IOService::stop(provider);
     }
 };
