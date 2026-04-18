@@ -2,6 +2,21 @@
 #include <IOKit/IOService.h>
 #include <IOKit/IOTimerEventSource.h>
 #include <mach/mach_types.h>
+#include <mach/task.h>
+#include <sys/proc.h>
+
+// Private kernel API — resolved at link time against the kernel
+extern "C" task_t proc_task(proc_t proc);
+
+// Processes to raise jetsam limits for (name, limit in MB)
+static struct { const char *name; int limitMB; } jetsam_overrides[] = {
+    {"WallpaperAgent",      128},
+    {"wallpaperexportd",     64},
+    {"BiomeAgent",           64},
+    {"PerfPowerService",     64},  // truncated to 16 chars by kernel
+    {"WallpaperVideoEx",    128},  // WallpaperVideoExtension
+    {nullptr, 0}
+};
 
 // iMac 27" Retina display EDID — Apple vendor, 1920x1080@60Hz, P3 color
 static const uint8_t iMacEDID[] = {
@@ -79,6 +94,34 @@ public:
         return true;
     }
 
+    static void raiseJetsamLimits() {
+        IOLog("QEMUHelper: scanning processes for jetsam limits...\n");
+        char name[256];
+        bzero(name, sizeof(name));
+        int found = 0;
+        for (pid_t pid = 1; pid < 2000; pid++) {
+            proc_t p = proc_find(pid);
+            if (!p) continue;
+            proc_name(pid, name, sizeof(name));
+            for (int i = 0; jetsam_overrides[i].name; i++) {
+                if (strncmp(name, jetsam_overrides[i].name, strlen(jetsam_overrides[i].name)) == 0) {
+                    found++;
+                    task_t task = proc_task(p);
+                    if (task) {
+                        int old_limit = 0;
+                        kern_return_t kr = task_set_phys_footprint_limit(task, jetsam_overrides[i].limitMB, &old_limit);
+                        IOLog("QEMUHelper: %s (pid %d) limit %d -> %d MB (kr=%d)\n",
+                              name, pid, old_limit, jetsam_overrides[i].limitMB, kr);
+                    } else {
+                        IOLog("QEMUHelper: %s (pid %d) — proc_task returned null\n", name, pid);
+                    }
+                }
+            }
+            proc_rele(p);
+        }
+        IOLog("QEMUHelper: jetsam scan done, %d processes found\n", found);
+    }
+
     static void timerFired(OSObject *owner, IOTimerEventSource *sender) {
         if (!gFramebuffer) return;
         QEMUHelper *self = (QEMUHelper *)owner;
@@ -86,6 +129,12 @@ public:
 
         patchVRAM(gFramebuffer);
         patchEDID(gFramebuffer);
+
+        // Raise jetsam limits on attempts 2 and 4 (15s and 35s after boot)
+        if (self->patchAttempts == 2 || self->patchAttempts == 4) {
+            raiseJetsamLimits();
+        }
+
         IOLog("QEMUHelper: patched (attempt %d)\n", self->patchAttempts);
 
         if (self->patchAttempts < 5) {
