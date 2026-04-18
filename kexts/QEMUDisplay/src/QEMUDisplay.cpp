@@ -71,6 +71,9 @@ bool QEMUDisplay::init(OSDictionary *dict) {
     pciDevice = nullptr;
     ioMap = nullptr;
     ioPort = 0;
+    connectProc = nullptr;
+    connectTarget = nullptr;
+    connectRef = nullptr;
     return true;
 }
 
@@ -97,12 +100,10 @@ bool QEMUDisplay::start(IOService *provider) {
 
     initDevice();
 
-    // Set initial mode
-    writeReg(SVGA_REG_WIDTH, currentWidth);
-    writeReg(SVGA_REG_HEIGHT, currentHeight);
-    writeReg(SVGA_REG_BITS_PER_PIXEL, 32);
-    writeReg(SVGA_REG_ENABLE, 1);
-    writeReg(SVGA_REG_CONFIG_DONE, 1);
+    // Read hardware info but DON'T enable SVGA mode.
+    // SVGA mode requires FIFO UPDATE commands for VNC display refresh.
+    // VGA mode auto-updates the display from VRAM — VNC works automatically.
+    // WindowServer writes pixels to VRAM (BAR1), VGA displays them.
 
     // Set VRAM property for system_profiler
     OSNumber *vram = OSNumber::withNumber((uint64_t)vramSize, 64);
@@ -127,6 +128,7 @@ bool QEMUDisplay::start(IOService *provider) {
     setProperty("IOFBConnectChange", kOSBooleanTrue);
 
     LOG("started — %ux%u, VRAM=%uMB", currentWidth, currentHeight, vramSize / (1024*1024));
+
     return true;
 }
 
@@ -144,11 +146,6 @@ void QEMUDisplay::free() {
 
 IOReturn QEMUDisplay::setPowerState(unsigned long powerStateOrdinal, IOService *device) {
     LOG("setPowerState %lu", powerStateOrdinal);
-    if (powerStateOrdinal > 0 && ioPort != 0) {
-        // Power on — enable SVGA
-        writeReg(SVGA_REG_ENABLE, 1);
-        writeReg(SVGA_REG_CONFIG_DONE, 1);
-    }
     return IOPMAckImplied;
 }
 
@@ -191,9 +188,15 @@ IOReturn QEMUDisplay::enableController() {
         setProperty(kIOFBMemorySizeKey, (uint64_t)vramMem->getLength(), 64);
     }
 
-    // Don't register power management here — IOFramebuffer::start() already
-    // calls PMinit/registerPowerDriver. Double registration causes conflicts
-    // with the screen lock state machine.
+    // Power management — 3 states matching IOFramebuffer expectations
+    static IOPMPowerState powerStates[] = {
+        {1, 0,                 0,           0,           0, 0, 0, 0, 0, 0, 0, 0},
+        {1, 0,                 IOPMPowerOn, IOPMPowerOn, 0, 0, 0, 0, 0, 0, 0, 0},
+        {1, IOPMDeviceUsable,  IOPMPowerOn, IOPMPowerOn, 0, 0, 0, 0, 0, 0, 0, 0}
+    };
+    PMinit();
+    registerPowerDriver(this, powerStates, 3);
+    changePowerStateTo(2);
 
     return kIOReturnSuccess;
 }
@@ -223,6 +226,11 @@ IOReturn QEMUDisplay::getAttributeForConnection(IOIndex connectIndex, IOSelect a
     }
 }
 
+IOReturn QEMUDisplay::setAttributeForConnection(IOIndex connectIndex, IOSelect attribute, uintptr_t value) {
+    // Accept all connection attribute sets — IOFramebuffer sends these during connect processing
+    return kIOReturnSuccess;
+}
+
 IODeviceMemory *QEMUDisplay::getVRAMRange() {
     // BAR1 = framebuffer memory
     return pciDevice->getDeviceMemoryWithRegister(kIOPCIConfigBaseAddress1);
@@ -230,9 +238,12 @@ IODeviceMemory *QEMUDisplay::getVRAMRange() {
 
 IODeviceMemory *QEMUDisplay::getApertureRange(IOPixelAperture aperture) {
     if (aperture != kIOFBSystemAperture) return nullptr;
-    IODeviceMemory *mem = pciDevice->getDeviceMemoryWithRegister(kIOPCIConfigBaseAddress1);
-    if (mem) mem->retain();
-    return mem;
+    // Return a sub-range matching the current mode's framebuffer size
+    IODeviceMemory *vram = pciDevice->getDeviceMemoryWithRegister(kIOPCIConfigBaseAddress1);
+    if (!vram) return nullptr;
+    IOByteCount fbSize = (IOByteCount)currentWidth * currentHeight * 4;
+    IODeviceMemory *sub = IODeviceMemory::withSubRange(vram, 0, fbSize);
+    return sub;
 }
 
 const char *QEMUDisplay::getPixelFormats() {
@@ -294,12 +305,8 @@ IOReturn QEMUDisplay::setDisplayMode(IODisplayModeID mode, IOIndex depth) {
         if (modes[i].id == mode) {
             currentWidth  = modes[i].width;
             currentHeight = modes[i].height;
-            writeReg(SVGA_REG_WIDTH, currentWidth);
-            writeReg(SVGA_REG_HEIGHT, currentHeight);
-            writeReg(SVGA_REG_BITS_PER_PIXEL, 32);
-            writeReg(SVGA_REG_ENABLE, 1);
-            writeReg(SVGA_REG_CONFIG_DONE, 1);
-            LOG("mode set to %ux%u", currentWidth, currentHeight);
+            // Don't write SVGA registers — stay in VGA mode for auto-display
+            LOG("mode set to %ux%u (VGA mode)", currentWidth, currentHeight);
             return kIOReturnSuccess;
         }
     }
@@ -312,10 +319,17 @@ UInt64 QEMUDisplay::getPixelFormatsForDisplayMode(IODisplayModeID mode, IOIndex 
 
 IOReturn QEMUDisplay::registerForInterruptType(IOSelect interruptType, IOFBInterruptProc proc,
     OSObject *target, void *ref, void **interruptRef) {
-    // Accept all interrupt registrations — IOFramebuffer needs VBL and connect interrupts
-    // We don't generate real interrupts but returning success lets IOFramebuffer proceed
     LOG("registerForInterruptType %u", (unsigned)interruptType);
-    *interruptRef = (void *)(uintptr_t)(interruptType + 1);  // non-NULL = registered
+    *interruptRef = (void *)(uintptr_t)(interruptType + 1);
+
+    // Save the connect interrupt callback so we can fire it to signal "display connected"
+    if (interruptType == kIOFBConnectInterruptType) {
+        connectProc = proc;
+        connectTarget = target;
+        connectRef = ref;
+        LOG("connect interrupt registered — will fire after open");
+    }
+
     return kIOReturnSuccess;
 }
 

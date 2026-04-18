@@ -46,6 +46,7 @@ public:
     IOReturn enableController() override;
     IOReturn getAttribute(IOSelect attribute, uintptr_t *value) override;
     IOReturn getAttributeForConnection(IOIndex connectIndex, IOSelect attribute, uintptr_t *value) override;
+    IOReturn setAttributeForConnection(IOIndex connectIndex, IOSelect attribute, uintptr_t value) override;
     IODeviceMemory *getVRAMRange() override;
     IODeviceMemory *getApertureRange(IOPixelAperture aperture) override;
     const char *getPixelFormats() override;
@@ -69,6 +70,9 @@ private:
     IOPCIDevice *pciDevice;
     IOMemoryMap *ioMap;
     uint16_t ioPort;  /* BAR0 I/O port base address */
+    IOFBInterruptProc connectProc;
+    OSObject *connectTarget;
+    void *connectRef;
     uint32_t vramSize;
     uint32_t maxWidth;
     uint32_t maxHeight;
