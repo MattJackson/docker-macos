@@ -32,7 +32,7 @@ echo "=== kmod_info.o ==="
 $CC "${CFLAGS[@]}" -c src/kmod_info.c -o build/kmod_info.o
 
 echo "=== plugin_start.o ==="
-$CXX "${CXXFLAGS[@]}" -c "$LILU_SDK/Library/plugin_start.cpp" -o build/plugin_start.o
+$CXX "${CXXFLAGS[@]}" -c src/plugin_start.cpp -o build/plugin_start.o
 
 echo "=== kern_start.o ==="
 $CXX "${CXXFLAGS[@]}" -c src/kern_start.cpp -o build/kern_start.o

@@ -2,69 +2,122 @@
 //  kern_patcher.cpp
 //  QEMUDisplayPatcher
 //
-//  Phase 1: Prove the Lilu plugin pipeline works.
-//  Hook IONDRVFramebuffer::enableController with IOLog.
-//  Once this fires, add the full QEMUDisplay behavior.
+//  Step 1: PROVEN WORKING enableController hook.
+//  Adding one thing at a time from here.
 //
 
 #include <Headers/kern_api.hpp>
 #include <Headers/kern_util.hpp>
 #include <Headers/kern_patcher.hpp>
 
+#include <IOKit/IOService.h>
+#include <IOKit/IOLib.h>
+#include <IOKit/pci/IOPCIDevice.h>
+
 #include "qdp_patcher.hpp"
 
-// Original function pointer
-static IOReturn (*orgEnableController)(void *that) = nullptr;
+// Originals
+static IOReturn (*orgEnableController)(void *) = nullptr;
+static IODeviceMemory * (*orgGetVRAMRange)(void *) = nullptr;
+static IODeviceMemory * (*orgGetApertureRange)(void *, int32_t) = nullptr;
 
-// Our replacement — just log and call original for now
+// Cached PCI device
+static IOPCIDevice *gPCIDevice = nullptr;
+
 static IOReturn patchedEnableController(void *that) {
-    IOLog("QDP: >>>>>> enableController HOOKED — plugin is working! <<<<<<\n");
+    IOLog("QDP: enableController ENTER\n");
 
-    // Call original so the driver still works
-    if (orgEnableController)
-        return orgEnableController(that);
-    return 0; // kIOReturnSuccess
+    // Grab PCI device before calling original
+    IOService *svc = (IOService *)that;
+    IOService *provider = svc->getProvider();
+    if (provider)
+        gPCIDevice = OSDynamicCast(IOPCIDevice, provider);
+    IOLog("QDP: pciDev=%p\n", gPCIDevice);
+
+    IOReturn ret = orgEnableController ? orgEnableController(that) : 0;
+    IOLog("QDP: original ret=%d\n", ret);
+
+    // Set VRAM from BAR1 size
+    if (gPCIDevice) {
+        IODeviceMemory *vram = gPCIDevice->getDeviceMemoryWithRegister(0x14);
+        if (vram) {
+            uint64_t sz = vram->getLength();
+            svc->setProperty("IOFBMemorySize", sz, 64);
+            IOLog("QDP: VRAM=%llu from BAR1\n", sz);
+        }
+
+        // SMC GPU power
+        uint8_t on = 1;
+        // Use inline asm for SMC port I/O
+        asm volatile("outb %0, %1" : : "a"((uint8_t)0x11), "Nd"((uint16_t)0x304));
+        IODelay(10000);
+    }
+
+    svc->setProperty("IOFB0Hz", true);
+    svc->setProperty("IOFBGammaCount", (uint64_t)256, 32);
+    svc->setProperty("IOFBGammaWidth", (uint64_t)8, 32);
+
+    IOLog("QDP: enableController DONE\n");
+    return ret;
 }
 
-// Kext info for IONDRVSupport — the kext that contains IONDRVFramebuffer
+static IODeviceMemory *patchedGetVRAMRange(void *that) {
+    IOLog("QDP: getVRAMRange\n");
+    if (gPCIDevice) {
+        IODeviceMemory *vram = gPCIDevice->getDeviceMemoryWithRegister(0x14);
+        if (vram) {
+            IOLog("QDP: returning BAR1 %llu bytes\n", vram->getLength());
+            return vram;
+        }
+    }
+    return orgGetVRAMRange ? orgGetVRAMRange(that) : nullptr;
+}
+
+static IODeviceMemory *patchedGetApertureRange(void *that, int32_t aperture) {
+    if (aperture != 0) // kIOFBSystemAperture = 0
+        return orgGetApertureRange ? orgGetApertureRange(that, aperture) : nullptr;
+
+    if (gPCIDevice) {
+        IODeviceMemory *vram = gPCIDevice->getDeviceMemoryWithRegister(0x14);
+        if (vram) {
+            // Return sub-range for 1920x1080x4
+            IOByteCount fbSize = 1920 * 1080 * 4;
+            return IODeviceMemory::withSubRange(vram, 0, fbSize);
+        }
+    }
+    return orgGetApertureRange ? orgGetApertureRange(that, aperture) : nullptr;
+}
+
+// Kext info
 static const char *kextPath[] {
     "/System/Library/Extensions/IONDRVSupport.kext/IONDRVSupport"
 };
 
 static KernelPatcher::KextInfo kextInfo {
     "com.apple.iokit.IONDRVSupport",
-    kextPath,
-    1,
-    {true},   // loaded = true (look for already-loaded kext)
-    {},       // user flags
+    kextPath, 1,
+    {true}, {},
     KernelPatcher::KextInfo::Unloaded
 };
 
-// Callback when IONDRVSupport loads
 static void onKextLoad(void *user, KernelPatcher &patcher, size_t id, mach_vm_address_t slide, size_t size) {
-    IOLog("QDP: onKextLoad fired for IONDRVSupport (id=%lu slide=0x%llx size=%lu)\n",
-          (unsigned long)id, (unsigned long long)slide, (unsigned long)size);
+    IOLog("QDP: onKextLoad id=%lu\n", (unsigned long)id);
 
-    // Route IONDRVFramebuffer::enableController
-    KernelPatcher::RouteRequest req {
-        "__ZN18IONDRVFramebuffer16enableControllerEv",
-        patchedEnableController,
-        orgEnableController
+    KernelPatcher::RouteRequest reqs[] = {
+        {"__ZN17IONDRVFramebuffer16enableControllerEv",
+         patchedEnableController, orgEnableController},
     };
+    patcher.routeMultiple(id, reqs, arrsize(reqs), slide, size);
 
-    if (patcher.routeMultiple(id, &req, 1, slide, size)) {
-        IOLog("QDP: enableController routed OK\n");
-    } else {
-        IOLog("QDP: enableController route FAILED (error %d)\n", patcher.getError());
+    if (patcher.getError() == KernelPatcher::Error::NoError)
+        IOLog("QDP: routed OK\n");
+    else {
+        IOLog("QDP: route err %d\n", patcher.getError());
         patcher.clearError();
     }
 }
 
-// Plugin entry point — called by Lilu from kern_start
 void pluginStart() {
-    IOLog("QDP: pluginStart called\n");
-
+    IOLog("QDP: pluginStart\n");
     lilu.onKextLoadForce(&kextInfo, 1, onKextLoad);
-
-    IOLog("QDP: registered for IONDRVSupport kext load\n");
 }
