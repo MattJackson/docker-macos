@@ -59,7 +59,7 @@ public:
 private:
     IOPCIDevice *pciDevice;
     IOMemoryMap *ioMap;
-    volatile uint32_t *ioBase;
+    uint16_t ioPort;  /* BAR0 I/O port base address */
     uint32_t vramSize;
     uint32_t maxWidth;
     uint32_t maxHeight;

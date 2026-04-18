@@ -26,15 +26,15 @@ static const ModeInfo modes[] = {
 };
 static const int numModes = sizeof(modes) / sizeof(modes[0]);
 
-// SVGA register access
+// SVGA register access — port-mapped I/O (BAR0 is I/O space, not memory)
 uint32_t QEMUDisplay::readReg(SVGARegister reg) {
-    ioBase[0] = reg;        // index port
-    return ioBase[1];       // value port
+    pciDevice->ioWrite32(ioPort + 0, reg);      // index port
+    return pciDevice->ioRead32(ioPort + 1);      // value port
 }
 
 void QEMUDisplay::writeReg(SVGARegister reg, uint32_t val) {
-    ioBase[0] = reg;
-    ioBase[1] = val;
+    pciDevice->ioWrite32(ioPort + 0, reg);
+    pciDevice->ioWrite32(ioPort + 1, val);
 }
 
 void QEMUDisplay::initDevice() {
@@ -56,7 +56,7 @@ bool QEMUDisplay::init(OSDictionary *dict) {
     if (!super::init(dict)) return false;
     pciDevice = nullptr;
     ioMap = nullptr;
-    ioBase = nullptr;
+    ioPort = 0;
     return true;
 }
 
@@ -72,13 +72,14 @@ bool QEMUDisplay::start(IOService *provider) {
     pciDevice->setMemoryEnable(true);
     pciDevice->setIOEnable(true);
 
-    // BAR0 = I/O ports for SVGA registers
-    ioMap = pciDevice->mapDeviceMemoryWithRegister(kIOPCIConfigBaseAddress0);
-    if (!ioMap) {
-        LOG("failed to map BAR0");
+    // BAR0 = I/O port space for SVGA register access
+    // VMware SVGA uses port-mapped I/O, not memory-mapped I/O
+    ioPort = (uint16_t)(pciDevice->configRead32(kIOPCIConfigBaseAddress0) & 0xFFFC);
+    if (ioPort == 0) {
+        LOG("failed to get BAR0 I/O port");
         return false;
     }
-    ioBase = (volatile uint32_t *)ioMap->getVirtualAddress();
+    LOG("BAR0 I/O port = 0x%x", ioPort);
 
     initDevice();
 
