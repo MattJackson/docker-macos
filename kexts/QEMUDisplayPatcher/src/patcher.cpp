@@ -87,6 +87,7 @@ static IOReturn         (*orgSetupForCurrentConfig)(void *) = nullptr;
 // === Patched methods ==========================================================
 
 static IOReturn patchedEnableController(void *that) {
+    if (!orgEnableController) { IOLog("QDP: orgEnableController NULL — skipping\n"); return 0; }
     IOReturn r = orgEnableController(that);
 
     uint8_t on = 0x01;
@@ -127,7 +128,7 @@ static IOReturn patchedGetDDCBlock(void *that, int32_t ci, uint32_t bn,
 static IOReturn patchedSetGammaTable(void *, uint32_t, uint32_t, uint32_t, void *) { return 0; }
 
 static IODeviceMemory *patchedGetVRAMRange(void *that) {
-    if (!that) return orgGetVRAMRange(that);
+    if (!that || !orgGetVRAMRange) return orgGetVRAMRange ? orgGetVRAMRange(that) : nullptr;
     IOService *fb = static_cast<IOService *>(that);
     IOPCIDevice *pci = OSDynamicCast(IOPCIDevice, fb->getProvider());
     if (pci) {
@@ -140,6 +141,7 @@ static IODeviceMemory *patchedGetVRAMRange(void *that) {
 static IOReturn patchedSetAttributeForConnection(void *, int32_t, uint32_t, uintptr_t) { return 0; }
 
 static IODeviceMemory *patchedGetApertureRange(void *that, int32_t aperture) {
+    if (!orgGetApertureRange) return nullptr;
     if (!that || aperture != 0) return orgGetApertureRange(that, aperture);
     IOService *fb = static_cast<IOService *>(that);
     IOPCIDevice *pci = OSDynamicCast(IOPCIDevice, fb->getProvider());
@@ -239,6 +241,7 @@ static IOReturn patchedGetTimingInfoForDisplayMode(void *, int32_t mode, IOTimin
 static uint32_t patchedGetConnectionCount(void *) { return 1; }
 
 static IOReturn patchedSetupForCurrentConfig(void *that) {
+    if (!orgSetupForCurrentConfig) { IOLog("QDP: orgSetupForCurrentConfig NULL — skipping\n"); return 0; }
     IOReturn r = orgSetupForCurrentConfig(that);
     if (that) {
         IOService *fb = static_cast<IOService *>(that);
