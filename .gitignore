@@ -14,3 +14,7 @@ kexts/CPUFriend/Tools/CPUFriendDataProvider.kext
 kexts/deps/
 kexts/*/build/
 oc-check.bin
+
+# Private working notes — live in private gitea (pq/mos)
+.claude/
+DISCOVERY.md

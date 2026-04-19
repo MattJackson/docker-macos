@@ -19,8 +19,8 @@
  *
  * Install (on VM):
  *   sudo cp jetsam-raise /usr/local/bin/
- *   sudo cp com.pq.jetsam-raise.plist /Library/LaunchDaemons/
- *   sudo launchctl load -w /Library/LaunchDaemons/com.pq.jetsam-raise.plist
+ *   sudo cp jetsam-raise.plist /Library/LaunchDaemons/dev.mos15.jetsam-raise.plist
+ *   sudo launchctl load -w /Library/LaunchDaemons/dev.mos15.jetsam-raise.plist
  */
 
 #include <stdio.h>
