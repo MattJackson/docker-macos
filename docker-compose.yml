@@ -10,6 +10,7 @@ services:
       - SMP=16                 # install: 24, running: 8
       - CORES=16               # install: 24, running: 8
       - DISK_SIZE=256G
+      - VGAMEM_MB=512          # framebuffer VRAM (256 sufficient for 5K, 512 free headroom)
     volumes:
       - ./mac_hdd_ng.img:/image
     network_mode: host
