@@ -28,10 +28,10 @@ If you only have one machine, it can be the Linux side (build kexts there too wi
 
 ```bash
 mkdir ~/mos && cd ~/mos
-git clone https://github.com/MattJackson/docker-macos
-git clone https://github.com/MattJackson/mos15-patcher
-git clone https://github.com/MattJackson/qemu-mos15
-git clone https://github.com/MattJackson/opencore-mos15   # optional; not on active path
+git clone https://github.com/MattJackson/mos-docker
+git clone https://github.com/MattJackson/mos-patcher
+git clone https://github.com/MattJackson/mos-qemu
+git clone https://github.com/MattJackson/mos-opencore   # optional; not on active path
 ```
 
 ## Step 2 — Get the macOS recovery image
@@ -82,7 +82,7 @@ Copy this somewhere the Dockerfile can find it as `OpenCore.img`:
 cp mos15.img OpenCore.img
 ```
 
-(This duplication is on the cleanup list — see [docker-macos issues](https://github.com/MattJackson/docker-macos/issues).)
+(This duplication is on the cleanup list — see [docker-macos issues](https://github.com/MattJackson/mos-docker/issues).)
 
 ## Step 4 — Build the container image
 

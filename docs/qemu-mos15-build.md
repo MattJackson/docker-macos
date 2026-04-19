@@ -151,7 +151,7 @@ ssh docker "ls -la /data/macos/qemu-mos15"
 
 ## Source layout reference
 
-- `~/mos/qemu-mos15/` — patch sources, tracked in GitHub MattJackson/qemu-mos15
+- `~/mos/qemu-mos15/` — patch sources, tracked in GitHub MattJackson/mos-qemu
   - `hw/misc/applesmc.c` — AppleSMC device with realistic iMac20,1 sensor values + key-index enumeration
   - `hw/display/vmware_vga.c` — extended VMware SVGA (4K + capability bits)
   - `hw/usb/dev-hid.c` — Apple USB HID identity (no Keyboard Setup Assistant prompt)

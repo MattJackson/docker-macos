@@ -1,4 +1,4 @@
-# docker-macos
+# mos-docker
 
 macOS Sequoia (15.7.5) running in Docker on Linux+KVM, with patched QEMU + a kernel-side display patcher for an OEM-like experience.
 
@@ -21,10 +21,10 @@ macOS Sequoia (15.7.5) running in Docker on Linux+KVM, with patched QEMU + a ker
 
 | Repo | What |
 |---|---|
-| **docker-macos** (this) | Dockerfile, build pipeline, kext source, OpenCore config, the orchestration |
-| [qemu-mos15](https://github.com/MattJackson/qemu-mos15) | QEMU patches — `applesmc`, `vmware_vga`, `dev-hid` |
-| [mos15-patcher](https://github.com/MattJackson/mos15-patcher) | Kernel-side hook framework (Lilu replacement, ~700 LOC) |
-| [opencore-mos15](https://github.com/MattJackson/opencore-mos15) | OpenCore patches — System KC injection (research, not active path) |
+| **mos-docker** (this) | Dockerfile, build pipeline, kext source, OpenCore config, the orchestration |
+| [mos-qemu](https://github.com/MattJackson/mos-qemu) | QEMU patches — `applesmc`, `vmware_vga`, `dev-hid` |
+| [mos-patcher](https://github.com/MattJackson/mos-patcher) | Kernel-side hook framework (Lilu replacement, ~700 LOC) |
+| [mos-opencore](https://github.com/MattJackson/mos-opencore) | OpenCore patches — System KC injection (research, not active path) |
 
 ## Architecture
 
