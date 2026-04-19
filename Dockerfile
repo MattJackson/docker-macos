@@ -1,6 +1,21 @@
+# mos suite — docker-macos
+# https://github.com/MattJackson/docker-macos
+#
+# Layered build:
+#   1. Alpine 3.21 builder stage compiles QEMU 10.2.2 with our qemu-mos15 patches
+#   2. Final Alpine runtime stage bundles QEMU + OVMF + recovery image + EFI image + launch.sh
+#
+# IMPORTANT — required files in the build context (this directory):
+#   - sequoia_recovery.img   ← Apple recovery image, ~3.2 GB. See SETUP.md step 2.
+#   - OpenCore.img           ← Bootable EFI image. Run ./build-mos15-img.sh && cp mos15.img OpenCore.img
+#
+# Without these the build fails with "COPY failed: file not found".
+
 FROM alpine:3.21 AS builder
 
-# Build QEMU 10.2.2 from source with Apple HID patches
+# Build QEMU 10.2.2 from source with our qemu-mos15 patches.
+# Alpine package list is exact — `dtc-dev` is correct (NOT libfdt-dev), and
+# do NOT add libmount-dev (doesn't exist in Alpine 3.21 and isn't needed).
 RUN apk add --no-cache \
     build-base python3 ninja meson pkgconf \
     glib-dev pixman-dev libcap-ng-dev libseccomp-dev \

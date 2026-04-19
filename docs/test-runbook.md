@@ -1,6 +1,6 @@
-# mos15 display test runbook
+# mos15 display test runbook (v0.5)
 
-Walk through this every time you deploy a new `mos15-patcher` or `QEMUDisplayPatcher` build. Each step has a clear pass signal, a clear fail signal, and what to do when it fails.
+Walk through this every time you deploy a new `mos15-patcher`, `QEMUDisplayPatcher`, or `qemu-mos15` build. Each step has a clear pass signal, a clear fail signal, and what to do when it fails.
 
 ---
 
@@ -9,12 +9,21 @@ Walk through this every time you deploy a new `mos15-patcher` or `QEMUDisplayPat
 - **Auto-login on the VM.** CoreGraphics APIs (the ones `list-modes` / `displayplacer` call) need a console-logged-in user bootstrap. Without it, `CGGetOnlineDisplayList` returns 0 and the whole observability layer goes dark.
   - Check: `ssh matthew@10.1.7.20 who` — expect `matthew console <date>`
   - Enable: `sudo sysadminctl -autologin set -userName <user> -password <pw>` (run on the VM, once)
-- **Compile the `list-modes` helper** on the host mac (VM doesn't ship Xcode CLT):
+- **Compile the helpers** on the host mac (VM doesn't ship Xcode CLT):
   ```bash
-  cd tests && clang -arch x86_64 -mmacosx-version-min=10.15 \
+  cd tests
+  clang -arch x86_64 -mmacosx-version-min=10.15 \
       -framework Foundation -framework CoreGraphics -framework CoreVideo \
       list-modes.m -o list-modes
+  clang -arch x86_64 -mmacosx-version-min=10.15 \
+      -framework Foundation -framework Metal -framework CoreGraphics \
+      metal-probe.m -o metal-probe
   ```
+- **One-time Admin.plist patch** (macOS first-boot bug — not ours, but blocks until patched):
+  ```bash
+  ssh matthew@10.1.7.20 'sudo plutil -replace trustList -array /var/protected/trustd/private/Admin.plist; sudo killall trustd'
+  ```
+  Without this, trustd burns ~62% CPU forever on "Malformed anchor records" looping. This persists across reboots until the file is patched. Tracked as task #26 to make it permanent in the image.
 
 ---
 

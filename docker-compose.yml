@@ -2,22 +2,19 @@ services:
   macos:
     build: .
     restart: unless-stopped
-    privileged: true
+    privileged: true                       # required for /dev/kvm + macvtap
     environment:
-      - IMAGE_PATH=/image
-      - HOST_IFACE=eth0        # your host's physical network interface
-      - RAM=16                 # install: 24, running: 16
-      - SMP=16                 # install: 24, running: 8
-      - CORES=16               # install: 24, running: 8
-      - DISK_SIZE=256G
-      - VGAMEM_MB=512          # framebuffer VRAM — real ceiling of qemu-mos15's vmware-svga device model. Requesting more (4096 tested) allocates in QEMU but device caps the guest-visible size at 512 MB. Doubled from the old 256 MB default. Honest hardware value, no lying to the guest.
+      - IMAGE_PATH=/image                  # path inside the container; bind-mount below maps it to host
+      - HOST_IFACE=eth0                    # CHANGE ME — your host network interface (find with `ip addr show`)
+      - RAM=16                             # GB. Install needs 24 minimum; steady-state 16 is comfortable
+      - SMP=16                             # vCPU sockets/threads
+      - CORES=16                           # vCPU cores per socket
+      - DISK_SIZE=256G                     # Created on first launch if mac_hdd_ng.img is empty
+      - VGAMEM_MB=512                      # VMware SVGA framebuffer VRAM. Device-side max is 512 MB; higher requests are silently capped.
     volumes:
-      - ./mac_hdd_ng.img:/image
-      # Our launch.sh (in this repo) drives QEMU directly. Bind-mounting over
-      # the container's baked /opt/macos/launch.sh means source-of-truth is here,
-      # VGAMEM_MB env var is respected, no image rebuild needed for arg changes.
-      - ./launch.sh:/opt/macos/launch.sh:ro
-    network_mode: host
+      - ./mac_hdd_ng.img:/image            # The macOS install/runtime disk. Touch this file empty to trigger install mode.
+      - ./launch.sh:/opt/macos/launch.sh:ro  # Source-of-truth launch.sh from this repo; lets env vars actually apply
+    network_mode: host                     # macvtap bridge needs host networking
 
   novnc:
     image: geek1011/easy-novnc
