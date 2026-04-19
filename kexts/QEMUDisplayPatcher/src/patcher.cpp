@@ -79,6 +79,7 @@ static const int numModes = sizeof(modes) / sizeof(modes[0]);
 static uint32_t gCurrentWidth  = 1920;
 static uint32_t gCurrentHeight = 1080;
 
+
 // === Trampolines (filled by mp_route_kext) ====================================
 static IOReturn         (*orgEnableController)(void *) = nullptr;
 static bool             (*orgHasDDCConnect)(void *, int32_t) = nullptr;
@@ -194,10 +195,29 @@ static IOReturn patchedEnableController(void *that) {
                 vramBytes = bar1->getLength();
                 fb->setProperty("IOFBMemorySize", vramBytes, 64);
             }
+            /* Identity props on the IOPCIDevice ONLY (not also on framebuffer
+             * — that caused system_profiler to report two GPUs). system_profiler
+             * reads these: `model` for the chipset name, `AAPL,slot-name` for
+             * the slot label. Without them VMware SVGA shows as "Unknown Unknown". */
+            pci->setProperty("model", "VMware SVGA II");
+            pci->setProperty("device_type", "display");
+            pci->setProperty("AAPL,slot-name", "Built-in");
+            uint8_t one = 1;
+            pci->setProperty("built-in", &one, sizeof(one));
         }
+        /* Explicitly do NOT set AAPL,GraphicsClass — the previous "IOBuiltInGraphics"
+         * value triggered Metal=Supported in system_profiler, inviting macOS to
+         * route 3D/GPU work to us. We have no Metal backing. Leaving the property
+         * absent keeps macOS in "no GPU accelerator present" mode.
+         *
+         * EXPERIMENT: does setProperty override CFBundleIdentifier for system_profiler's
+         * "Kernel Extension Info" check? The real kext that matched is IONDRVSupport
+         * (generic Apple fallback), but we can see if a spoofed bundle ID here gets
+         * picked up. Pretend to be VMsvga2 — system_profiler would recognize that. */
+        fb->setProperty("CFBundleIdentifier", "com.vmware.kext.VMsvga2");
     }
 
-    IOLog("QDP: enableController -> 0x%x (SMC+VRAM=%lluMB)\n",
+    IOLog("QDP: enableController -> 0x%x (VRAM=%lluMB)\n",
           (unsigned)r, vramBytes / (1024 * 1024));
     return r;
 }

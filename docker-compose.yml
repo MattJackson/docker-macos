@@ -10,7 +10,7 @@ services:
       - SMP=16                 # install: 24, running: 8
       - CORES=16               # install: 24, running: 8
       - DISK_SIZE=256G
-      - VGAMEM_MB=512          # framebuffer VRAM (256 sufficient for 5K, 512 free headroom)
+      - VGAMEM_MB=512          # framebuffer VRAM — real ceiling of qemu-mos15's vmware-svga device model. Requesting more (4096 tested) allocates in QEMU but device caps the guest-visible size at 512 MB. Doubled from the old 256 MB default. Honest hardware value, no lying to the guest.
     volumes:
       - ./mac_hdd_ng.img:/image
     network_mode: host
