@@ -13,6 +13,10 @@ services:
       - VGAMEM_MB=512          # framebuffer VRAM — real ceiling of qemu-mos15's vmware-svga device model. Requesting more (4096 tested) allocates in QEMU but device caps the guest-visible size at 512 MB. Doubled from the old 256 MB default. Honest hardware value, no lying to the guest.
     volumes:
       - ./mac_hdd_ng.img:/image
+      # Our launch.sh (in this repo) drives QEMU directly. Bind-mounting over
+      # the container's baked /opt/macos/launch.sh means source-of-truth is here,
+      # VGAMEM_MB env var is respected, no image rebuild needed for arg changes.
+      - ./launch.sh:/opt/macos/launch.sh:ro
     network_mode: host
 
   novnc:
