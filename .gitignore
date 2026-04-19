@@ -5,6 +5,8 @@ OpenCore.qcow2
 mac_hdd_ng.img
 *.img
 *.qcow2
+builds/
+mos15.img
 .env
 kexts/*/build/
 kexts/CPUFriend/Tools/CPUFriendDataProvider.kext
@@ -12,5 +14,3 @@ kexts/CPUFriend/Tools/CPUFriendDataProvider.kext
 kexts/deps/
 kexts/*/build/
 oc-check.bin
-HANDOFF.md
-boot-log-*.txt

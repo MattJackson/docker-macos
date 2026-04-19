@@ -3,7 +3,7 @@ set -e
 cd "$(dirname "$0")"
 
 KERN_SDK="../deps/MacKernelSDK"
-LILU_SDK="../deps/Lilu-1.7.2-DEBUG/Lilu.kext/Contents/Resources"
+LILU_SDK="../deps/Lilu-mos15-DEBUG.kext/Contents/Resources"
 OUT="build/QEMUDisplayPatcher.kext/Contents/MacOS/QEMUDisplayPatcher"
 
 CXX="xcrun -sdk macosx clang++"
