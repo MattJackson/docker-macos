@@ -22,7 +22,7 @@ set -euo pipefail
 
 cd "$(dirname "$0")"
 
-LILU_KEXT="kexts/deps/Lilu-mos15-DEBUG.kext"
+MP_KEXT="kexts/deps/mos15-patcher.kext"
 QDP_KEXT="kexts/QEMUDisplayPatcher/build/QEMUDisplayPatcher.kext"
 SYSTEM_KC="${SYSTEM_KC:-$HOME/mos-staging/SystemKernelExtensions.kc}"
 SIZE_MB=512
@@ -36,7 +36,7 @@ OUT="builds/mos15_${STAMP}${SUFFIX}.img"
 LATEST="mos15.img"
 
 REQUIRED=(efi "$SYSTEM_KC")
-[ "$BASELINE" = "1" ] || REQUIRED+=("$LILU_KEXT" "$QDP_KEXT")
+[ "$BASELINE" = "1" ] || REQUIRED+=("$MP_KEXT" "$QDP_KEXT")
 for f in "${REQUIRED[@]}"; do
     [ -e "$f" ] || { echo "missing input: $f"; exit 1; }
 done
@@ -62,15 +62,12 @@ cp -R efi/EFI "$MNT/"
 mkdir -p "$MNT/EFI/OC/Kexts" "$MNT/EFI/OC/Tools"
 
 if [ "$BASELINE" = "1" ]; then
-    echo "==> BASELINE: disabling Lilu + QEMUDisplayPatcher in config.plist"
-    # Both blocks have `<true/>` on the line right after `<key>Enabled</key>`.
-    # The canonical config.plist on disk is the source — we mutate the copy.
+    echo "==> BASELINE: disabling mos15-patcher + QEMUDisplayPatcher in config.plist"
     python3 - "$MNT/EFI/OC/config.plist" <<'PY'
 import sys, re
 p = sys.argv[1]
 src = open(p).read()
 def disable(text, bundle):
-    # find dict containing this BundlePath, flip its Enabled true→false
     pat = re.compile(
         r'(<dict>(?:(?!</dict>).)*?<string>' + re.escape(bundle) + r'</string>'
         r'(?:(?!</dict>).)*?<key>Enabled</key>\s*)<true/>',
@@ -79,14 +76,15 @@ def disable(text, bundle):
     new, n = pat.subn(r'\1<false/>', text)
     if n != 1: raise SystemExit(f"failed to disable {bundle}: matched {n} times")
     return new
-src = disable(src, 'Lilu.kext')
-src = disable(src, 'QEMUDisplayPatcher.kext')
+for b in ('Lilu.kext', 'mos15-patcher.kext', 'QEMUDisplayPatcher.kext'):
+    try: src = disable(src, b)
+    except SystemExit as e: print(f"    note: {e}")
 open(p, 'w').write(src)
-print("    disabled Lilu.kext and QEMUDisplayPatcher.kext")
+print("    BASELINE config written")
 PY
 else
     echo "==> Copying built kexts"
-    cp -R "$LILU_KEXT" "$MNT/EFI/OC/Kexts/Lilu.kext"
+    cp -R "$MP_KEXT" "$MNT/EFI/OC/Kexts/"
     cp -R "$QDP_KEXT" "$MNT/EFI/OC/Kexts/"
 fi
 

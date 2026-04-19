@@ -29,7 +29,7 @@
 			<key>CFBundleIdentifier</key>
 			<string>com.docker-macos.driver.QEMUDisplayPatcher</string>
 			<key>IOClass</key>
-			<string>QEMUDisplayPatcher</string>
+			<string>IOService</string>
 			<key>IOMatchCategory</key>
 			<string>QEMUDisplayPatcher</string>
 			<key>IOProviderClass</key>
@@ -48,8 +48,8 @@
 		<string>8.0.0</string>
 		<key>com.apple.iokit.IOPCIFamily</key>
 		<string>1.6</string>
-		<key>as.vit9696.Lilu</key>
-		<string>1.2.0</string>
+		<key>com.docker-macos.kext.mos15Patcher</key>
+		<string>1.0.0</string>
 	</dict>
 </dict>
 </plist>

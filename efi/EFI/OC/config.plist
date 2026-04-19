@@ -364,13 +364,13 @@
 				<key>Arch</key>
 				<string>x86_64</string>
 				<key>BundlePath</key>
-				<string>Lilu.kext</string>
+				<string>mos15-patcher.kext</string>
 				<key>Comment</key>
-				<string>Lilu patch engine</string>
+				<string>mos15-patcher kernel hook framework</string>
 				<key>Enabled</key>
 				<true/>
 				<key>ExecutablePath</key>
-				<string>Contents/MacOS/Lilu</string>
+				<string>Contents/MacOS/mos15-patcher</string>
 				<key>MaxKernel</key>
 				<string></string>
 				<key>MinKernel</key>
