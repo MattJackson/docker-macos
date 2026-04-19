@@ -1,6 +1,6 @@
 # qemu-mos15 build + iterate guide
 
-Our container image's `/usr/bin/qemu-system-x86_64` is built from QEMU 10.2.2 with our patches from `/Users/mjackson/qemu-mos15/hw/`. This doc covers **two build flows**:
+Our container image's `/usr/bin/qemu-system-x86_64` is built from QEMU 10.2.2 with our patches from `~/mos/qemu-mos15/hw/`. This doc covers **two build flows**:
 
 1. **Fast iteration** — rebuild a single `.c`, swap binary on the host, restart container (~2 min)
 2. **Full image rebuild** — rebuild the Docker image via Dockerfile (~15-20 min)
@@ -43,10 +43,10 @@ Flow:
 
 ```bash
 # 1. Edit patch source locally
-vim /Users/mjackson/qemu-mos15/hw/misc/applesmc.c
+vim ~/mos/qemu-mos15/hw/misc/applesmc.c
 
 # 2. Push the patched file to the host's QEMU tree
-scp /Users/mjackson/qemu-mos15/hw/misc/applesmc.c \
+scp ~/mos/qemu-mos15/hw/misc/applesmc.c \
     docker:/tmp/qemu-10.2.2/hw/misc/applesmc.c
 
 # 3. Build inside Alpine (only recompiles changed .c + relinks)
@@ -115,10 +115,10 @@ docker push registry.docker.pq.io/macos:sequoia
 # Re-pull on the host and recreate the stack via Portainer
 ```
 
-The Dockerfile builds QEMU itself — it pulls the qemu-mos15 patches from GitHub at build time. Any changes to `/Users/mjackson/qemu-mos15/` must be pushed to GitHub first:
+The Dockerfile builds QEMU itself — it pulls the qemu-mos15 patches from GitHub at build time. Any changes to `~/mos/qemu-mos15/` must be pushed to GitHub first:
 
 ```bash
-git -C /Users/mjackson/qemu-mos15 push
+git -C ~/mos/qemu-mos15 push
 ```
 
 Then the Dockerfile's `curl | tar xz` step picks up the latest patches.
@@ -138,7 +138,7 @@ ssh docker "sudo docker exec macos-macos-1 ps auxww | grep qemu | head -1"
 ssh docker "sudo docker exec macos-macos-1 ps auxww | grep -oE 'vgamem_mb=[0-9]+'"
 
 # 3. macOS saw our changes? (e.g. for applesmc changes)
-ssh matthew@10.1.7.20 "sudo log show --last 5s --predicate 'eventMessage CONTAINS \"SMC\"' | wc -l"
+ssh <vm-user>@<vm-ip> "sudo log show --last 5s --predicate 'eventMessage CONTAINS \"SMC\"' | wc -l"
 ```
 
 If behavior is wrong but container is running, the binary is loaded but the patch isn't doing what you expected — back to editing. If behavior is unchanged and old, check that `/data/macos/qemu-mos15` timestamp is recent:
@@ -151,7 +151,7 @@ ssh docker "ls -la /data/macos/qemu-mos15"
 
 ## Source layout reference
 
-- `/Users/mjackson/qemu-mos15/` — patch sources, tracked in GitHub MattJackson/qemu-mos15
+- `~/mos/qemu-mos15/` — patch sources, tracked in GitHub MattJackson/qemu-mos15
   - `hw/misc/applesmc.c` — AppleSMC device with realistic iMac20,1 sensor values + key-index enumeration
   - `hw/display/vmware_vga.c` — extended VMware SVGA (4K + capability bits)
   - `hw/usb/dev-hid.c` — Apple USB HID identity (no Keyboard Setup Assistant prompt)
@@ -159,4 +159,4 @@ ssh docker "ls -la /data/macos/qemu-mos15"
 - `/tmp/qemu-10.2.2/build-alpine/` (on docker host) — musl build output
 - `/data/macos/qemu-mos15` (on docker host) — the binary the container bind-mounts
 
-See `/Users/mjackson/qemu-mos15/README.md` for the Dockerfile-based build.
+See `~/mos/qemu-mos15/README.md` for the Dockerfile-based build.

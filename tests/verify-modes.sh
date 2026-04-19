@@ -4,8 +4,7 @@
 # enumeration. Run AFTER the VM reaches desktop (auto-login required).
 #
 # Usage:
-#   ./tests/verify-modes.sh                 # default: matthew@10.1.7.20
-#   VM=user@host ./tests/verify-modes.sh
+#   VM=user@host ./tests/verify-modes.sh    # required: VM ssh target
 #
 # Exit codes:
 #   0 — every check passed
@@ -16,7 +15,7 @@
 #   5 — a patched hook was never invoked by macOS
 
 set -u
-VM="${VM:-matthew@10.1.7.20}"
+VM="${VM:?VM env var required, e.g. VM=user@10.0.0.1}"
 SSH_OPTS="-o ConnectTimeout=5 -o BatchMode=yes"
 BIN_SRC="$(dirname "$0")/list-modes"
 

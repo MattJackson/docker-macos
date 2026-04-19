@@ -4,7 +4,7 @@ set -e
 cd "$(dirname "$0")"
 
 KERN_SDK="${KERN_SDK:-../deps/MacKernelSDK}"
-MP_HEADERS="${MP_HEADERS:-/Users/mjackson/mos15-patcher/include}"
+MP_HEADERS="${MP_HEADERS:-../../../mos15-patcher/include}"
 OUT="build/QEMUDisplayPatcher.kext/Contents/MacOS/QEMUDisplayPatcher"
 
 mkdir -p "$(dirname "$OUT")"

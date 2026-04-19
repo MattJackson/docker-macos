@@ -43,13 +43,13 @@ Single source of truth: every byte in the running VM is generated from inputs in
 
 ```bash
 # (if mos15-patcher changed) rebuild + drop into kexts/deps
-cd /Users/mjackson/mos15-patcher
-KERN_SDK=/Users/mjackson/docker-macos/kexts/deps/MacKernelSDK ./build.sh
-cp -R build/mos15-patcher.kext /Users/mjackson/docker-macos/kexts/deps/
+cd ~/mos/mos15-patcher
+KERN_SDK=$HOME/mos/docker-macos/kexts/deps/MacKernelSDK ./build.sh
+cp -R build/mos15-patcher.kext $HOME/mos/docker-macos/kexts/deps/
 
 # Always
-cd /Users/mjackson/docker-macos/kexts/QEMUDisplayPatcher && rm -rf build && ./build.sh
-cd /Users/mjackson/docker-macos
+cd ~/mos/docker-macos/kexts/QEMUDisplayPatcher && rm -rf build && ./build.sh
+cd ~/mos/docker-macos
 ./build-mos15-img.sh   # produces builds/mos15_YYYYMMDDHHMMSS.img + symlink
 ./deploy.sh            # stops container, scp, retargets symlink, restarts
 

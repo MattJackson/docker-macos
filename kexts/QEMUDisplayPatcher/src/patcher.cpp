@@ -18,7 +18,6 @@
 // === EDID =====================================================================
 // Real iMac20,1 (Retina 5K, 27", 2020) EDID — 2 blocks, 256 bytes total.
 // Manufacturer APP (Apple), product 0xae31, monitor name "iMac".
-// Source: /Users/mjackson/mos/imac20-1-hardware-reference.md §2.
 // The extension-flag byte (126) = 0x01 signals to macOS that block 2 exists,
 // so getDDCBlock is called with bn=2 for the CTA-861 extension.
 static const uint8_t imac20_edid_block0[128] = {

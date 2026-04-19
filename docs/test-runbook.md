@@ -7,7 +7,7 @@ Walk through this every time you deploy a new `mos15-patcher`, `QEMUDisplayPatch
 ## 0. Prerequisites (one-time setup)
 
 - **Auto-login on the VM.** CoreGraphics APIs (the ones `list-modes` / `displayplacer` call) need a console-logged-in user bootstrap. Without it, `CGGetOnlineDisplayList` returns 0 and the whole observability layer goes dark.
-  - Check: `ssh matthew@10.1.7.20 who` — expect `matthew console <date>`
+  - Check: `ssh <vm-user>@<vm-ip> who` — expect `<vm-user> console <date>`
   - Enable: `sudo sysadminctl -autologin set -userName <user> -password <pw>` (run on the VM, once)
 - **Compile the helpers** on the host mac (VM doesn't ship Xcode CLT):
   ```bash
@@ -21,7 +21,7 @@ Walk through this every time you deploy a new `mos15-patcher`, `QEMUDisplayPatch
   ```
 - **One-time Admin.plist patch** (macOS first-boot bug — not ours, but blocks until patched):
   ```bash
-  ssh matthew@10.1.7.20 'sudo plutil -replace trustList -array /var/protected/trustd/private/Admin.plist; sudo killall trustd'
+  ssh <vm-user>@<vm-ip> 'sudo plutil -replace trustList -array /var/protected/trustd/private/Admin.plist; sudo killall trustd'
   ```
   Without this, trustd burns ~62% CPU forever on "Malformed anchor records" looping. This persists across reboots until the file is patched. Tracked as task #26 to make it permanent in the image.
 
@@ -29,16 +29,16 @@ Walk through this every time you deploy a new `mos15-patcher`, `QEMUDisplayPatch
 
 ## 1. Build + deploy
 
-Always from `/Users/mjackson/docker-macos`:
+Always from `~/mos/docker-macos`:
 ```bash
 # (if mos15-patcher changed)
-cd /Users/mjackson/mos15-patcher && rm -f build/*.o && \
-    KERN_SDK=/Users/mjackson/docker-macos/kexts/deps/MacKernelSDK ./build.sh
-cp -R build/mos15-patcher.kext /Users/mjackson/docker-macos/kexts/deps/
+cd ~/mos/mos15-patcher && rm -f build/*.o && \
+    KERN_SDK=$HOME/mos/docker-macos/kexts/deps/MacKernelSDK ./build.sh
+cp -R build/mos15-patcher.kext $HOME/mos/docker-macos/kexts/deps/
 
 # always
-cd /Users/mjackson/docker-macos/kexts/QEMUDisplayPatcher && rm -rf build && ./build.sh
-cd /Users/mjackson/docker-macos && ./build-mos15-img.sh && ./deploy.sh
+cd ~/mos/docker-macos/kexts/QEMUDisplayPatcher && rm -rf build && ./build.sh
+cd ~/mos/docker-macos && ./build-mos15-img.sh && ./deploy.sh
 ```
 
 Expected: `==> Starting macos-macos-1` and an image md5 printed.
@@ -84,7 +84,7 @@ If `QDP: starting` missing but mp:start ran: QDP.kext didn't load. Usually `OSBu
 ## 4. Hook coverage — 24/24 methods patched, 0 gaps
 
 ```bash
-ssh matthew@10.1.7.20 "ioreg -c IONDRVFramebuffer -l 2>/dev/null" | grep -E '"MP[A-Z]'
+ssh <vm-user>@<vm-ip> "ioreg -c IONDRVFramebuffer -l 2>/dev/null" | grep -E '"MP[A-Z]'
 ```
 
 **Expected (today, as of 2026-04-19 — post connectFlags fix):**
@@ -120,7 +120,7 @@ The 24 method pairs covered (first = IONDRVFramebuffer override, second = IOFram
 ## 5. EDID identity — real iMac20,1 bytes in IOKit
 
 ```bash
-ssh matthew@10.1.7.20 "ioreg -l 2>/dev/null" | grep -E '"DisplayProductID"|"DisplayVendorID"|"IODisplayEDID"' | head -3
+ssh <vm-user>@<vm-ip> "ioreg -l 2>/dev/null" | grep -E '"DisplayProductID"|"DisplayVendorID"|"IODisplayEDID"' | head -3
 ```
 
 **Expected:**
@@ -190,8 +190,8 @@ Root cause of the earlier filtering (fixed): IONDRVFramebuffer's default `connec
 ## 8. VRAM + current display state
 
 ```bash
-ssh matthew@10.1.7.20 "system_profiler SPDisplaysDataType"
-ssh matthew@10.1.7.20 "ioreg -c IONDRVFramebuffer -l | grep -E 'IOFBCurrentPixelCount|IOFBMemorySize'"
+ssh <vm-user>@<vm-ip> "system_profiler SPDisplaysDataType"
+ssh <vm-user>@<vm-ip> "ioreg -c IONDRVFramebuffer -l | grep -E 'IOFBCurrentPixelCount|IOFBMemorySize'"
 ```
 
 **Expected:**
