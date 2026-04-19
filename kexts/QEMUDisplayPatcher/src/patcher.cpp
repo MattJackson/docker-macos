@@ -253,17 +253,24 @@ static IOReturn patchedSetupForCurrentConfig(void *that) {
     return r;
 }
 
-// === Mangled-name helper ======================================================
-static char gMangleBufs[40][128];
+// === Mangled-name helpers =====================================================
+// Many IOFramebuffer-derived methods aren't overridden by IONDRVFramebuffer.
+// In that case the vtable slot points at the IOFramebuffer base-class
+// implementation in IOGraphicsFamily, not at an IONDRVFramebuffer symbol.
+// We register TWO routes per method (derived + base) with the same
+// replacement — the one whose symbol exists resolves, the other is a no-op.
+static char gMangleBufs[80][128];
 static int  gMangleNext = 0;
 
-static const char *mangleNDRV(const char *method, const char *paramSig) {
-    if (gMangleNext >= 40) return "";
+static const char *mangleClass(const char *cls, const char *method, const char *paramSig) {
+    if (gMangleNext >= 80) return "";
     char *out = gMangleBufs[gMangleNext++];
-    snprintf(out, 128, "__ZN17IONDRVFramebuffer%d%sE%s",
-             (int)strlen(method), method, paramSig);
+    snprintf(out, 128, "__ZN%d%s%d%sE%s",
+             (int)strlen(cls), cls, (int)strlen(method), method, paramSig);
     return out;
 }
+static const char *mangleNDRV(const char *m, const char *s) { return mangleClass("IONDRVFramebuffer", m, s); }
+static const char *mangleFB(const char *m, const char *s)   { return mangleClass("IOFramebuffer", m, s); }
 
 // === Kext entry — register routes via mos15-patcher ===========================
 
@@ -272,30 +279,37 @@ kern_return_t qdp_start(kmod_info_t *ki, void *d)
 {
     IOLog("QDP: starting (mos15-patcher edition)\n");
 
+    #define ROUTE(method, sig, replacement, org) \
+        { mangleNDRV(method, sig), (void *)(replacement), (void **)&(org) }, \
+        { mangleFB(method,   sig), (void *)(replacement), (void **)&(org) }
+
     mp_route_request_t reqs[] = {
-        { mangleNDRV("enableController",              "v"),                            (void *)patchedEnableController,           (void **)&orgEnableController },
-        { mangleNDRV("hasDDCConnect",                 "i"),                            (void *)patchedHasDDCConnect,              (void **)&orgHasDDCConnect },
-        { mangleNDRV("getDDCBlock",                   "ijjjPhPy"),                     (void *)patchedGetDDCBlock,                (void **)&orgGetDDCBlock },
-        { mangleNDRV("setGammaTable",                 "jjjPv"),                        (void *)patchedSetGammaTable,              (void **)&orgSetGammaTable },
-        { mangleNDRV("getVRAMRange",                  "v"),                            (void *)patchedGetVRAMRange,               (void **)&orgGetVRAMRange },
-        { mangleNDRV("setAttributeForConnection",     "ijm"),                          (void *)patchedSetAttributeForConnection,  (void **)&orgSetAttributeForConnection },
-        { mangleNDRV("getApertureRange",              "15IOPixelAperture"),            (void *)patchedGetApertureRange,           (void **)&orgGetApertureRange },
-        { mangleNDRV("getPixelFormats",               "v"),                            (void *)patchedGetPixelFormats,            (void **)&orgGetPixelFormats },
-        { mangleNDRV("getDisplayModeCount",           "v"),                            (void *)patchedGetDisplayModeCount,        (void **)&orgGetDisplayModeCount },
-        { mangleNDRV("getDisplayModes",               "Pi"),                           (void *)patchedGetDisplayModes,            (void **)&orgGetDisplayModes },
-        { mangleNDRV("getInformationForDisplayMode",  "iP24IODisplayModeInformation"), (void *)patchedGetInformationForDisplayMode, (void **)&orgGetInformationForDisplayMode },
-        { mangleNDRV("getPixelInformation",           "iiiP18IOPixelInformation"),     (void *)patchedGetPixelInformation,        (void **)&orgGetPixelInformation },
-        { mangleNDRV("getCurrentDisplayMode",         "PiS0_"),                        (void *)patchedGetCurrentDisplayMode,      (void **)&orgGetCurrentDisplayMode },
-        { mangleNDRV("setDisplayMode",                "ii"),                           (void *)patchedSetDisplayMode,             (void **)&orgSetDisplayMode },
-        { mangleNDRV("getPixelFormatsForDisplayMode", "ii"),                           (void *)patchedGetPixelFormatsForDisplayMode, (void **)&orgGetPixelFormatsForDisplayMode },
-        { mangleNDRV("getTimingInfoForDisplayMode",   "iP19IOTimingInformation"),      (void *)patchedGetTimingInfoForDisplayMode, (void **)&orgGetTimingInfoForDisplayMode },
-        { mangleNDRV("getConnectionCount",            "v"),                            (void *)patchedGetConnectionCount,         (void **)&orgGetConnectionCount },
-        { mangleNDRV("setupForCurrentConfig",         "v"),                            (void *)patchedSetupForCurrentConfig,      (void **)&orgSetupForCurrentConfig },
+        ROUTE("enableController",              "v",                             patchedEnableController,           orgEnableController),
+        ROUTE("hasDDCConnect",                 "i",                             patchedHasDDCConnect,              orgHasDDCConnect),
+        ROUTE("getDDCBlock",                   "ijjjPhPy",                      patchedGetDDCBlock,                orgGetDDCBlock),
+        ROUTE("setGammaTable",                 "jjjPv",                         patchedSetGammaTable,              orgSetGammaTable),
+        ROUTE("getVRAMRange",                  "v",                             patchedGetVRAMRange,               orgGetVRAMRange),
+        ROUTE("setAttributeForConnection",     "ijm",                           patchedSetAttributeForConnection,  orgSetAttributeForConnection),
+        ROUTE("getApertureRange",              "15IOPixelAperture",             patchedGetApertureRange,           orgGetApertureRange),
+        ROUTE("getPixelFormats",               "v",                             patchedGetPixelFormats,            orgGetPixelFormats),
+        ROUTE("getDisplayModeCount",           "v",                             patchedGetDisplayModeCount,        orgGetDisplayModeCount),
+        ROUTE("getDisplayModes",               "Pi",                            patchedGetDisplayModes,            orgGetDisplayModes),
+        ROUTE("getInformationForDisplayMode",  "iP24IODisplayModeInformation",  patchedGetInformationForDisplayMode, orgGetInformationForDisplayMode),
+        ROUTE("getPixelInformation",           "iiiP18IOPixelInformation",      patchedGetPixelInformation,        orgGetPixelInformation),
+        ROUTE("getCurrentDisplayMode",         "PiS0_",                         patchedGetCurrentDisplayMode,      orgGetCurrentDisplayMode),
+        ROUTE("setDisplayMode",                "ii",                            patchedSetDisplayMode,             orgSetDisplayMode),
+        ROUTE("getPixelFormatsForDisplayMode", "ii",                            patchedGetPixelFormatsForDisplayMode, orgGetPixelFormatsForDisplayMode),
+        ROUTE("getTimingInfoForDisplayMode",   "iP19IOTimingInformation",       patchedGetTimingInfoForDisplayMode, orgGetTimingInfoForDisplayMode),
+        ROUTE("getConnectionCount",            "v",                             patchedGetConnectionCount,         orgGetConnectionCount),
+        ROUTE("setupForCurrentConfig",         "v",                             patchedSetupForCurrentConfig,      orgSetupForCurrentConfig),
     };
     int n = sizeof(reqs) / sizeof(*reqs);
+    #undef ROUTE
 
-    int rc = mp_route_kext("com.apple.iokit.IONDRVSupport", reqs, n);
-    IOLog("QDP: mp_route_kext returned %d (n=%d routes)\n", rc, n);
+    int rc = mp_route_on_publish("IONDRVFramebuffer",
+                                  "com.apple.iokit.IONDRVSupport",
+                                  reqs, n);
+    IOLog("QDP: mp_route_on_publish returned %d (n=%d routes)\n", rc, n);
 
     return KERN_SUCCESS;
 }
