@@ -69,9 +69,9 @@ HE0N, MSDW, NTOK
 ## Architecture
 
 ```
-github.com/MattJackson/qemu-mos15       ← QEMU patches (3 files)
-github.com/MattJackson/opencore-mos15   ← OpenCore patches (if needed)
-github.com/MattJackson/docker-macos     ← Docker image
+github.com/MattJackson/mos-qemu       ← QEMU patches (3 files)
+github.com/MattJackson/mos-opencore   ← OpenCore patches (if needed)
+github.com/MattJackson/mos-docker     ← Docker image
 ```
 
 ## Current State

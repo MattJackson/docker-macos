@@ -1,5 +1,5 @@
 # mos suite — docker-macos
-# https://github.com/MattJackson/docker-macos
+# https://github.com/MattJackson/mos-docker
 #
 # Layered build:
 #   1. Alpine 3.21 builder stage compiles QEMU 10.2.2 with our qemu-mos15 patches
@@ -24,7 +24,7 @@ RUN apk add --no-cache \
 ARG QEMU_VERSION=10.2.2
 RUN curl -sL https://download.qemu.org/qemu-${QEMU_VERSION}.tar.xz | tar xJ -C /tmp \
     && cd /tmp/qemu-${QEMU_VERSION} \
-    && curl -sL https://github.com/MattJackson/qemu-mos15/archive/refs/heads/main.tar.gz | tar xz -C /tmp \
+    && curl -sL https://github.com/MattJackson/mos-qemu/archive/refs/heads/main.tar.gz | tar xz -C /tmp \
     && cp /tmp/qemu-mos15-main/hw/misc/applesmc.c hw/misc/applesmc.c \
     && cp /tmp/qemu-mos15-main/hw/display/vmware_vga.c hw/display/vmware_vga.c \
     && cp /tmp/qemu-mos15-main/hw/usb/dev-hid.c hw/usb/dev-hid.c \

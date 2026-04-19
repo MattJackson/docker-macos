@@ -5,9 +5,9 @@
 This project is one of four repos working together to run macOS Sequoia in Docker on Linux+KVM:
 
 - **docker-macos** (this repo) — orchestration: Docker image, build pipeline, kext source, OpenCore config, tests, runbook
-- **[mos15-patcher](https://github.com/MattJackson/mos15-patcher)** — kernel-side hook framework (Lilu replacement, ~700 LOC we own)
-- **[qemu-mos15](https://github.com/MattJackson/qemu-mos15)** — patches to QEMU 10.2.2 (`applesmc`, `vmware_vga`, `dev-hid`)
-- **[opencore-mos15](https://github.com/MattJackson/opencore-mos15)** — OpenCore patches (System KC injection — research, not active path)
+- **[mos-patcher](https://github.com/MattJackson/mos-patcher)** — kernel-side hook framework (Lilu replacement, ~700 LOC we own)
+- **[mos-qemu](https://github.com/MattJackson/mos-qemu)** — patches to QEMU 10.2.2 (`applesmc`, `vmware_vga`, `dev-hid`)
+- **[mos-opencore](https://github.com/MattJackson/mos-opencore)** — OpenCore patches (System KC injection — research, not active path)
 
 A change to anything user-visible usually touches at least two of these. Cross-link in commit messages.
 
