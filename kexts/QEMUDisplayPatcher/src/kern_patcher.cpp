@@ -57,10 +57,11 @@ static void smcWriteKey(const char *key, uint8_t len, const uint8_t *data) {
 }
 
 // === Trampolines ============================================================
-static IOReturn (*orgEnableController)(void *) = nullptr;
-static bool     (*orgHasDDCConnect)(void *, int32_t) = nullptr;
-static IOReturn (*orgGetDDCBlock)(void *, int32_t, uint32_t, uint32_t, uint32_t, uint8_t *, uint64_t *) = nullptr;
-static IOReturn (*orgSetGammaTable)(void *, uint32_t, uint32_t, uint32_t, void *) = nullptr;
+static IOReturn         (*orgEnableController)(void *) = nullptr;
+static bool             (*orgHasDDCConnect)(void *, int32_t) = nullptr;
+static IOReturn         (*orgGetDDCBlock)(void *, int32_t, uint32_t, uint32_t, uint32_t, uint8_t *, uint64_t *) = nullptr;
+static IOReturn         (*orgSetGammaTable)(void *, uint32_t, uint32_t, uint32_t, void *) = nullptr;
+static IODeviceMemory * (*orgGetVRAMRange)(void *) = nullptr;
 
 // === Runtime mode flag ======================================================
 // gBasicMode = true → every hook is pure passthrough to original (no SMC,
@@ -81,17 +82,40 @@ static bool gBasicMode = false;
 // 2. Read PCI BAR1 size and setProperty IOFBMemorySize.
 // 3. Return kIOReturnSuccess.
 // enableController:
-// fancy: call orig, write SMC HE0N/HE2N=1 (AGPM happy on wallpaper change).
-//        TODO: VRAM property — adding it crashed previously, bisecting separately.
+// fancy: call orig, write SMC HE0N/HE2N=1 (AGPM happy on wallpaper change),
+//        setProperty IOFBMemorySize from PCI BAR1 length (qemu's vgamem_mb=256
+//        → 256MB shown in About This Mac). Mirrors QEMUDisplay::enableController.
+//        Requires com.apple.iokit.IOPCIFamily in OSBundleLibraries.
 // basic: pure passthrough.
 static IOReturn patchedEnableController(void *that) {
     IOReturn r = orgEnableController(that);
-    if (!gBasicMode) {
-        uint8_t on = 0x01;
-        smcWriteKey("HE0N", 1, &on);
-        smcWriteKey("HE2N", 1, &on);
+    if (gBasicMode) {
+        IOLog("QDP: enableController -> 0x%x (basic)\n", (unsigned)r);
+        return r;
     }
-    IOLog("QDP: enableController -> 0x%x (mode=%s)\n", (unsigned)r, gBasicMode ? "basic" : "fancy+smc");
+
+    /* SMC GPU power on. */
+    uint8_t on = 0x01;
+    smcWriteKey("HE0N", 1, &on);
+    smcWriteKey("HE2N", 1, &on);
+
+    /* VRAM property from PCI BAR1. */
+    uint64_t vramBytes = 0;
+    if (that) {
+        IOService *fb = static_cast<IOService *>(that);
+        IOService *prov = fb->getProvider();
+        IOPCIDevice *pci = OSDynamicCast(IOPCIDevice, prov);
+        if (pci) {
+            IODeviceMemory *bar1 = pci->getDeviceMemoryWithRegister(kIOPCIConfigBaseAddress1);
+            if (bar1) {
+                vramBytes = bar1->getLength();
+                fb->setProperty("IOFBMemorySize", vramBytes, 64);
+            }
+        }
+    }
+
+    IOLog("QDP: enableController -> 0x%x (fancy: SMC+VRAM=%lluMB)\n",
+          (unsigned)r, vramBytes / (1024 * 1024));
     return r;
 }
 
@@ -129,6 +153,27 @@ static IOReturn patchedSetGammaTable(void *that, uint32_t channelCount, uint32_t
     return 0;
 }
 
+// getVRAMRange:
+// fancy: return PCI BAR1 (qemu vmware-svga's framebuffer aperture, sized by
+//        vgamem_mb=256 → 256MB). OEM IONDRV's getVRAMRange falls back to the
+//        7.91MB hardcoded NDRV value; this overrides that everywhere macOS
+//        derives VRAM size from the live query.
+// basic: passthrough.
+static IODeviceMemory *patchedGetVRAMRange(void *that) {
+    if (gBasicMode || !that) return orgGetVRAMRange(that);
+    IOService *fb = static_cast<IOService *>(that);
+    IOService *prov = fb->getProvider();
+    IOPCIDevice *pci = OSDynamicCast(IOPCIDevice, prov);
+    if (pci) {
+        IODeviceMemory *bar1 = pci->getDeviceMemoryWithRegister(kIOPCIConfigBaseAddress1);
+        if (bar1) {
+            bar1->retain();  /* IODeviceMemory caller-owned per IOFB convention */
+            return bar1;
+        }
+    }
+    return orgGetVRAMRange(that);
+}
+
 // === Routing =================================================================
 static const char *kextPath[] {
     "/System/Library/Extensions/IONDRVSupport.kext/IONDRVSupport"
@@ -150,11 +195,12 @@ static void onKextLoad(void *user, KernelPatcher &patcher, size_t id, mach_vm_ad
         {"__ZN17IONDRVFramebuffer13hasDDCConnectEi",     patchedHasDDCConnect,    orgHasDDCConnect},
         {"__ZN17IONDRVFramebuffer11getDDCBlockEijjjPhPy", patchedGetDDCBlock,     orgGetDDCBlock},
         {"__ZN17IONDRVFramebuffer13setGammaTableEjjjPv", patchedSetGammaTable,    orgSetGammaTable},
+        {"__ZN17IONDRVFramebuffer12getVRAMRangeEv",      patchedGetVRAMRange,     orgGetVRAMRange},
     };
     patcher.routeMultiple(id, reqs, arrsize(reqs), slide, size);
 
     if (patcher.getError() == KernelPatcher::Error::NoError)
-        IOLog("QDP: 4/4 routed (P1 mirror)\n");
+        IOLog("QDP: 5/5 routed (P1 mirror + getVRAMRange)\n");
     else {
         IOLog("QDP: routeMultiple err %d\n", patcher.getError());
         patcher.clearError();
