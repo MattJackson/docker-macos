@@ -5,13 +5,13 @@
 	<key>CFBundleDevelopmentRegion</key>
 	<string>en</string>
 	<key>CFBundleExecutable</key>
-	<string>mos15-metal</string>
+	<string>mos-metal</string>
 	<key>CFBundleIdentifier</key>
-	<string>com.docker-macos.kext.mos15Metal</string>
+	<string>com.docker-macos.kext.mosMetal</string>
 	<key>CFBundleInfoDictionaryVersion</key>
 	<string>6.0</string>
 	<key>CFBundleName</key>
-	<string>mos15-metal</string>
+	<string>mos-metal</string>
 	<key>CFBundlePackageType</key>
 	<string>KEXT</string>
 	<key>CFBundleShortVersionString</key>
@@ -24,14 +24,14 @@
 	<string>Root</string>
 	<key>IOKitPersonalities</key>
 	<dict>
-		<key>mos15-metal</key>
+		<key>mos-metal</key>
 		<dict>
 			<key>CFBundleIdentifier</key>
-			<string>com.docker-macos.kext.mos15Metal</string>
+			<string>com.docker-macos.kext.mosMetal</string>
 			<key>IOClass</key>
 			<string>MOSMetalAccelerator</string>
 			<key>IOMatchCategory</key>
-			<string>mos15-metal</string>
+			<string>mos-metal</string>
 			<key>IOProviderClass</key>
 			<string>IOResources</string>
 			<key>IOResourceMatch</key>

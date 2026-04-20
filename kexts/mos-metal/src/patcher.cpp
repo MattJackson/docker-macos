@@ -1,5 +1,5 @@
 //
-// patcher.cpp — mos15-metal, Phase -1.B scaffold.
+// patcher.cpp — mos-metal, Phase -1.B scaffold.
 //
 // Publishes a fake IOAccelerator-typed IOService so we can observe
 // Metal.framework's enumeration pass and classify its
@@ -31,9 +31,9 @@ OSDefineMetaClassAndStructors(MOSMetalAccelerator, IOService)
 
 bool MOSMetalAccelerator::start(IOService *provider)
 {
-    IOLog("mos15-metal: MOSMetalAccelerator::start provider=%p\n", provider);
+    IOLog("mos-metal: MOSMetalAccelerator::start provider=%p\n", provider);
     if (!IOService::start(provider)) {
-        IOLog("mos15-metal: super::start failed\n");
+        IOLog("mos-metal: super::start failed\n");
         return false;
     }
 
@@ -42,22 +42,22 @@ bool MOSMetalAccelerator::start(IOService *provider)
      * discoverable — registerService publishes us so Metal.framework can
      * enumerate. */
     registerService();
-    IOLog("mos15-metal: registerService called\n");
+    IOLog("mos-metal: registerService called\n");
     return true;
 }
 
 void MOSMetalAccelerator::stop(IOService *provider)
 {
-    IOLog("mos15-metal: stop\n");
+    IOLog("mos-metal: stop\n");
     IOService::stop(provider);
 }
 
-extern "C" kern_return_t mos15_metal_start(kmod_info_t *, void *) {
-    IOLog("mos15-metal: kmod start (Phase -1.B scaffold — fake IOAccelerator publish)\n");
+extern "C" kern_return_t mos_metal_start(kmod_info_t *, void *) {
+    IOLog("mos-metal: kmod start (Phase -1.B scaffold — fake IOAccelerator publish)\n");
     return KERN_SUCCESS;
 }
 
-extern "C" kern_return_t mos15_metal_stop(kmod_info_t *, void *) {
+extern "C" kern_return_t mos_metal_stop(kmod_info_t *, void *) {
     /* Don't allow unload — our IOService subclass is referenced by
      * the running instance. */
     return KERN_FAILURE;

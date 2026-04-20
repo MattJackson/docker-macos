@@ -400,13 +400,13 @@
 				<key>Arch</key>
 				<string>x86_64</string>
 				<key>BundlePath</key>
-				<string>mos15-metal.kext</string>
+				<string>mos-metal.kext</string>
 				<key>Comment</key>
-				<string>mos15-metal software Metal probe (Phase -1.A scaffold)</string>
+				<string>mos-metal software Metal probe (Phase -1.A/-1.B scaffold)</string>
 				<key>Enabled</key>
 				<true/>
 				<key>ExecutablePath</key>
-				<string>Contents/MacOS/mos15-metal</string>
+				<string>Contents/MacOS/mos-metal</string>
 				<key>MaxKernel</key>
 				<string></string>
 				<key>MinKernel</key>

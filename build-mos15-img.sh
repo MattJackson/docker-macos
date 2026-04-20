@@ -24,7 +24,7 @@ cd "$(dirname "$0")"
 
 MP_KEXT="kexts/deps/mos15-patcher.kext"
 QDP_KEXT="kexts/QEMUDisplayPatcher/build/QEMUDisplayPatcher.kext"
-METAL_KEXT="kexts/mos15-metal/build/mos15-metal.kext"
+METAL_KEXT="kexts/mos-metal/build/mos-metal.kext"
 SYSTEM_KC="${SYSTEM_KC:-$HOME/mos-staging/SystemKernelExtensions.kc}"
 SIZE_MB=512
 BASELINE="${BASELINE:-0}"  # BASELINE=1 → no Lilu, no QDP, OEM IONDRV unhooked
@@ -77,7 +77,7 @@ def disable(text, bundle):
     new, n = pat.subn(r'\1<false/>', text)
     if n != 1: raise SystemExit(f"failed to disable {bundle}: matched {n} times")
     return new
-for b in ('Lilu.kext', 'mos15-patcher.kext', 'QEMUDisplayPatcher.kext', 'mos15-metal.kext'):
+for b in ('Lilu.kext', 'mos15-patcher.kext', 'QEMUDisplayPatcher.kext', 'mos-metal.kext'):
     try: src = disable(src, b)
     except SystemExit as e: print(f"    note: {e}")
 open(p, 'w').write(src)

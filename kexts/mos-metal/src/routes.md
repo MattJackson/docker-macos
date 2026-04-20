@@ -1,4 +1,4 @@
-# Route-resolution strategy for mos15-metal (Phase -1.A.4)
+# Route-resolution strategy for mos-metal (Phase -1.A.4)
 
 Closed by Phase -1.A.4 of the Software Metal plan. Live-verified on
 the VM on 2026-04-19.
@@ -49,7 +49,7 @@ form scales to any depth with no further API surface.
 
 Post-deploy on the VM:
 
-- `kextstat`: mos15-patcher, QDP, mos15-metal all loaded
+- `kextstat`: mos-patcher, QDP, mos-metal all loaded
 - `ioreg -c IONDRVFramebuffer`: `MPMethodsHooked=24`, `MPMethodsMissing=0`
 - `MPStatus` string character-for-character identical to the
   pre-change baseline:
@@ -60,7 +60,7 @@ Post-deploy on the VM:
 
 ## What this unlocks for Metal
 
-When Phase 1.1 declares its route table, mos15-metal will pass the
+When Phase 1.1 declares its route table, mos-metal will pass the
 appropriate chain for the active branch:
 
 - **Branch A** (AppleParavirtGPU attaches, -1.D positive):
@@ -74,7 +74,7 @@ appropriate chain for the active branch:
 - **Branch B** (we publish our own IOService):
   ```c
   static const char *const kexts[] = {
-      "com.docker-macos.kext.mos15Metal",
+      "com.docker-macos.kext.mosMetal",
       nullptr
   };
   ```
@@ -88,10 +88,10 @@ No further mos-patcher changes needed for either branch.
 Satisfied:
 
 - mos-patcher rebuilt with array API, deployed into
-  `docker-macos/kexts/deps/mos15-patcher.kext`.
+  `docker-macos/kexts/deps/mos15-patcher.kext` (local dep dir name unchanged).
 - QDP rebuilt against new API, deployed.
-- mos15-metal (empty scaffold) still loads — kextstat idx 59,
-  `mos15-metal: start` breadcrumb present.
+- mos-metal (empty scaffold) still loads — kextstat idx 59,
+  `mos-metal: start` breadcrumb present.
 - QDP MPStatus byte-for-byte identical → zero regression to
   existing consumer.
 - verify-modes.sh 8/8, metal-probe count=0.

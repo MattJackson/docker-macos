@@ -1,6 +1,6 @@
 #!/bin/bash
 # metal-kext-loaded.sh — gating test introduced by Phase -1.A.3.
-# Asserts that mos15-metal.kext was actually loaded (not dropped by
+# Asserts that mos-metal.kext was actually loaded (not dropped by
 # OpenCore / prelinked injection), and that its start() IOLog
 # breadcrumb hit the kernel log.
 #
@@ -18,8 +18,8 @@ VM="${VM:?VM env var required, e.g. VM=matthew@10.1.7.20}"
 DOCKER_HOST_SSH="${DOCKER_HOST_SSH:-docker}"
 CONTAINER="${CONTAINER:-macos-macos-1}"
 SSH_OPTS="-o ConnectTimeout=5 -o BatchMode=yes"
-IDENT="com.docker-macos.kext.mos15Metal"
-BREADCRUMB="mos15-metal: start"
+IDENT="com.docker-macos.kext.mosMetal"
+BREADCRUMB="mos-metal:"
 
 RED=$(printf '\033[0;31m'); GRN=$(printf '\033[0;32m'); RST=$(printf '\033[0m')
 pass() { echo "${GRN}✓${RST} $1"; }
@@ -47,4 +47,4 @@ fi
 pass "start breadcrumb: $(echo "$BREAD" | head -1)"
 
 echo
-echo "${GRN}=== mos15-metal kext loaded and started ===${RST}"
+echo "${GRN}=== mos-metal kext loaded and started ===${RST}"
