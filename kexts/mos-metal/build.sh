@@ -6,6 +6,7 @@ set -e
 cd "$(dirname "$0")"
 
 KERN_SDK="${KERN_SDK:-../deps/MacKernelSDK}"
+MP_HEADERS="${MP_HEADERS:-../../../mos15-patcher/include}"
 OUT="build/mos-metal.kext/Contents/MacOS/mos-metal"
 
 rm -rf build/mos-metal.kext
@@ -21,6 +22,7 @@ CXXFLAGS=(
     -mkernel -nostdlib -nostdinc -nostdinc++
     -DKERNEL -DKERNEL_PRIVATE
     -I"$KERN_SDK/Headers"
+    -I"$MP_HEADERS"
     -Isrc -w
 )
 CFLAGS=(
