@@ -24,6 +24,7 @@ cd "$(dirname "$0")"
 
 MP_KEXT="kexts/deps/mos15-patcher.kext"
 QDP_KEXT="kexts/QEMUDisplayPatcher/build/QEMUDisplayPatcher.kext"
+METAL_KEXT="kexts/mos15-metal/build/mos15-metal.kext"
 SYSTEM_KC="${SYSTEM_KC:-$HOME/mos-staging/SystemKernelExtensions.kc}"
 SIZE_MB=512
 BASELINE="${BASELINE:-0}"  # BASELINE=1 → no Lilu, no QDP, OEM IONDRV unhooked
@@ -36,7 +37,7 @@ OUT="builds/mos15_${STAMP}${SUFFIX}.img"
 LATEST="mos15.img"
 
 REQUIRED=(efi "$SYSTEM_KC")
-[ "$BASELINE" = "1" ] || REQUIRED+=("$MP_KEXT" "$QDP_KEXT")
+[ "$BASELINE" = "1" ] || REQUIRED+=("$MP_KEXT" "$QDP_KEXT" "$METAL_KEXT")
 for f in "${REQUIRED[@]}"; do
     [ -e "$f" ] || { echo "missing input: $f"; exit 1; }
 done
@@ -76,7 +77,7 @@ def disable(text, bundle):
     new, n = pat.subn(r'\1<false/>', text)
     if n != 1: raise SystemExit(f"failed to disable {bundle}: matched {n} times")
     return new
-for b in ('Lilu.kext', 'mos15-patcher.kext', 'QEMUDisplayPatcher.kext'):
+for b in ('Lilu.kext', 'mos15-patcher.kext', 'QEMUDisplayPatcher.kext', 'mos15-metal.kext'):
     try: src = disable(src, b)
     except SystemExit as e: print(f"    note: {e}")
 open(p, 'w').write(src)
@@ -86,6 +87,7 @@ else
     echo "==> Copying built kexts"
     cp -R "$MP_KEXT" "$MNT/EFI/OC/Kexts/"
     cp -R "$QDP_KEXT" "$MNT/EFI/OC/Kexts/"
+    cp -R "$METAL_KEXT" "$MNT/EFI/OC/Kexts/"
 fi
 
 echo "==> Copying System KC (349MB)"
