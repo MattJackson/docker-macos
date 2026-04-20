@@ -19,7 +19,14 @@ FROM alpine:3.21 AS builder
 RUN apk add --no-cache \
     build-base python3 ninja meson pkgconf \
     glib-dev pixman-dev libcap-ng-dev libseccomp-dev \
-    libslirp-dev libaio-dev curl bash git dtc-dev
+    libslirp-dev libaio-dev curl bash git dtc-dev \
+    mesa-vulkan-swrast vulkan-loader vulkan-headers vulkan-tools
+
+# Clone and build libapplegfx-vulkan
+RUN git clone https://github.com/MattJackson/libapplegfx-vulkan.git /tmp/libapplegfx-vulkan \
+    && cd /tmp/libapplegfx-vulkan \
+    && meson setup --prefix=/usr --libdir=lib builddir \
+    && ninja -C builddir install
 
 ARG QEMU_VERSION=10.2.2
 RUN curl -sL https://download.qemu.org/qemu-${QEMU_VERSION}.tar.xz | tar xJ -C /tmp \
@@ -28,6 +35,11 @@ RUN curl -sL https://download.qemu.org/qemu-${QEMU_VERSION}.tar.xz | tar xJ -C /
     && cp /tmp/qemu-mos15-main/hw/misc/applesmc.c hw/misc/applesmc.c \
     && cp /tmp/qemu-mos15-main/hw/display/vmware_vga.c hw/display/vmware_vga.c \
     && cp /tmp/qemu-mos15-main/hw/usb/dev-hid.c hw/usb/dev-hid.c \
+    && cp /tmp/qemu-mos15-main/hw/display/apple-gfx-pci-linux.c hw/display/ \
+    && cp /tmp/qemu-mos15-main/hw/display/apple-gfx-common-linux.c hw/display/ \
+    && cp /tmp/qemu-mos15-main/hw/display/apple-gfx-linux.h hw/display/ \
+    && cp /tmp/qemu-mos15-main/hw/display/meson.build hw/display/meson.build \
+    && cp /tmp/qemu-mos15-main/hw/display/Kconfig hw/display/Kconfig \
     && ./configure \
         --target-list=x86_64-softmmu \
         --prefix=/usr \
@@ -49,7 +61,8 @@ FROM alpine:3.21
 # 1. Alpine + runtime deps (changes rarely)
 RUN apk add --no-cache \
     glib pixman libcap-ng libseccomp libslirp \
-    libaio libbz2 dtc bash iproute2 ovmf
+    libaio libbz2 dtc bash iproute2 ovmf \
+    vulkan-loader mesa-vulkan-swrast
 
 # 2. Recovery image (3.2GB, never changes after initial download)
 COPY sequoia_recovery.img /opt/macos/recovery.img
