@@ -1,0 +1,5 @@
+# Ignore timestamped per-run captures; only commit the reference images.
+# Format: YYYY-MM-DD_HHMMSS-{login,desktop-idle}.png
+*.png
+!reference/
+!reference/*.png
