@@ -572,9 +572,12 @@ kern_return_t qdp_start(kmod_info_t *ki, void *d)
     int n = sizeof(reqs) / sizeof(*reqs);
     #undef PAIR
 
-    int rc = mp_route_on_publish("IONDRVFramebuffer",
-                                  "com.apple.iokit.IONDRVSupport",
-                                  reqs, n);
+    static const char *const qdp_kexts[] = {
+        "com.apple.iokit.IONDRVSupport",     /* primary — IONDRVFramebuffer overrides */
+        "com.apple.iokit.IOGraphicsFamily",  /* fallback — IOFramebuffer base methods */
+        nullptr
+    };
+    int rc = mp_route_on_publish("IONDRVFramebuffer", qdp_kexts, reqs, n);
     IOLog("QDP: mp_route_on_publish returned %d (n=%d routes)\n", rc, n);
 
     return KERN_SUCCESS;

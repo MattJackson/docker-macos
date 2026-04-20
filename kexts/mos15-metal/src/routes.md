@@ -1,85 +1,97 @@
-# Route-resolution strategy for mos15-metal (Phase -1.A.4 verdict)
+# Route-resolution strategy for mos15-metal (Phase -1.A.4)
 
-Closed by Phase -1.A.4 of the Software Metal plan. Live-verified
-against the current VM on 2026-04-19.
+Closed by Phase -1.A.4 of the Software Metal plan. Live-verified on
+the VM on 2026-04-19.
 
 ## Question
 
-Does the mos-patcher symbol resolver's hardcoded fallback kext
-(`com.apple.iokit.IOGraphicsFamily`, `src/notify.cpp:118`) block
-Metal work, where the primary kext is
-`com.apple.iokit.IOAcceleratorFamily2` or
-`com.apple.driver.AppleParavirtGPU`?
+Does `mos-patcher`'s hardcoded resolver fallback block Metal work,
+where the primary kext is `IOAcceleratorFamily2` or
+`AppleParavirtGPU` instead of `IONDRVSupport`?
 
-## Verdict
+## What we did
 
-**No — `MP_ROUTE_EXACT` against the right primary kext covers every
-Metal-work hook we have in scope through Phase 3.** No mos-patcher
-change needed for -1.A exit.
+Replaced the hardcoded `com.apple.iokit.IOGraphicsFamily` fallback
+with a caller-supplied **NULL-terminated array** of kext bundle
+ids. Element 0 is primary (required); subsequent non-NULL entries
+are fallbacks tried in order when primary lookup misses. Passing a
+1-entry chain `{primary, NULL}` disables fallback.
 
-## Evidence
+New signature (mos-patcher):
 
-Live `ioreg -c IONDRVFramebuffer` shows QDP's 24-hook status string:
-
+```c
+int mp_route_on_publish(const char *class_name,
+                        const char *const *kext_bundle_ids,
+                        mp_route_request_t *reqs,
+                        size_t count);
 ```
-MPMethodsHooked  = 24
-MPStatus         = "Pf Pf Pf Pf Pf Pf PX PX PX PX PX PX PX Pf PX Pf Pf Pf Pf Pf Pf Pf Pf Pf "
-MPMethodsMissing = 0
+
+QDP's call site (docker-macos) now declares its chain explicitly:
+
+```cpp
+static const char *const qdp_kexts[] = {
+    "com.apple.iokit.IONDRVSupport",     // primary
+    "com.apple.iokit.IOGraphicsFamily",  // base-class fallback
+    nullptr
+};
+mp_route_on_publish("IONDRVFramebuffer", qdp_kexts, reqs, n);
 ```
 
-Legend (`mos15-patcher/src/notify.cpp:152`): one char per route,
-where MP_ROUTE_PAIR emits two routes (derived + base).
+## Why an array and not a single fallback
 
-- `P` — primary kext resolved AND vtable slot patched
-- `F` — fallback kext resolved AND slot patched
-- `u` / `f` — resolved but slot not present in this instance
-- `X` — unresolved
+Inheritance depth isn't always two. For Branch A (AppleParavirtGPU
+attaches), a natural chain is
+`AppleParavirtGPU → IOAcceleratorFamily2 → IOGraphicsFamily` — three
+deep. A fixed primary+fallback API couldn't express it. The array
+form scales to any depth with no further API surface.
 
-All 24 hooked methods land on `P` (derived resolved via primary =
-`IONDRVSupport`). The `f`/`X` entries are the *secondary* base-class
-lookups that MP_ROUTE_PAIR also emits — they don't add to the hook
-count when the derived route already won, and their outcome doesn't
-affect functionality. **The IOGraphicsFamily fallback is useful for
-belt-and-suspenders but is not load-bearing** even for the
-framebuffer case.
+## Zero regression
 
-## Applied to Metal
+Post-deploy on the VM:
 
-When we hook `IOAccelerator` subclass methods:
+- `kextstat`: mos15-patcher, QDP, mos15-metal all loaded
+- `ioreg -c IONDRVFramebuffer`: `MPMethodsHooked=24`, `MPMethodsMissing=0`
+- `MPStatus` string character-for-character identical to the
+  pre-change baseline:
+  `Pf Pf Pf Pf Pf Pf PX PX PX PX PX PX PX Pf PX Pf Pf Pf Pf Pf Pf Pf Pf Pf`
+- `verify-modes.sh` 8/8
+- `metal-probe` count=0 (monotone rule)
+- No panic
 
-- **Branch A** (AppleParavirtGPU attaches, Phase -1.D): primary =
-  `com.apple.driver.AppleParavirtGPU`. Subclass overrides resolve
-  via primary. Inherited-but-not-overridden base methods resolve
-  against `IOAcceleratorFamily2` — handled by passing explicit
-  mangled names to `MP_ROUTE_EXACT` and using `mp_route_kext` for
-  kext-scoped resolution. The hardcoded `IOGraphicsFamily` fallback
-  is irrelevant (we don't route through it).
-- **Branch B** (we publish our own IOAccelerator, -1.B/-1.C):
-  primary = our own kext. Same pattern; no upstream dependency.
+## What this unlocks for Metal
 
-## What this does *not* commit us to
+When Phase 1.1 declares its route table, mos15-metal will pass the
+appropriate chain for the active branch:
 
-- Phase 1.1.2 will enumerate exact mangled names with `nm`/`otool`
-  against the running kernel binaries. If that pass reveals a
-  surface where an `IOAcceleratorFamily2`-hosted base method is
-  needed *via fallback* (i.e., MP_ROUTE_PAIR semantics against an
-  AppleParavirtGPU subclass where the derived route misses),
-  parameterizing the fallback in `mp_route_on_publish` becomes a
-  small targeted diff then — not now.
-- Phase -1.B may change the primary-kext identity (if we ship a
-  stub plugin bundle and publish our own IOService). Route table
-  is re-scoped then.
+- **Branch A** (AppleParavirtGPU attaches, -1.D positive):
+  ```c
+  static const char *const kexts[] = {
+      "com.apple.driver.AppleParavirtGPU",
+      "com.apple.iokit.IOAcceleratorFamily2",
+      nullptr
+  };
+  ```
+- **Branch B** (we publish our own IOService):
+  ```c
+  static const char *const kexts[] = {
+      "com.docker-macos.kext.mos15Metal",
+      nullptr
+  };
+  ```
+
+No further mos-patcher changes needed for either branch.
 
 ## Gating test for -1.A.4
 
 > "Compile + deploy either path; empty kext still loads; no test regressions."
 
-Satisfied by the -1.A.3 deploy:
+Satisfied:
 
-- `mos15-metal.kext` compiles (Phase -1.A.1).
-- Deploys and loads on boot (Phase -1.A.3; `kextstat` idx 59,
-  `IOMatchedAtBoot=Yes` in ioreg, `mos15-metal: start` breadcrumb).
-- `verify-modes.sh` remains 8/8. `metal-probe` remains count=0
-  (monotone floor).
-- No mos-patcher change — QDP's route table unchanged, still 24/24
-  hooked with 0 missing.
+- mos-patcher rebuilt with array API, deployed into
+  `docker-macos/kexts/deps/mos15-patcher.kext`.
+- QDP rebuilt against new API, deployed.
+- mos15-metal (empty scaffold) still loads — kextstat idx 59,
+  `mos15-metal: start` breadcrumb present.
+- QDP MPStatus byte-for-byte identical → zero regression to
+  existing consumer.
+- verify-modes.sh 8/8, metal-probe count=0.
