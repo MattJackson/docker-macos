@@ -29,13 +29,22 @@
 			<key>CFBundleIdentifier</key>
 			<string>com.docker-macos.kext.mos15Metal</string>
 			<key>IOClass</key>
-			<string>IOService</string>
+			<string>MOSMetalAccelerator</string>
 			<key>IOMatchCategory</key>
 			<string>mos15-metal</string>
 			<key>IOProviderClass</key>
 			<string>IOResources</string>
 			<key>IOResourceMatch</key>
 			<string>IOKit</string>
+			<key>AcceleratorProperties</key>
+			<dict>
+				<key>IOMatchCategory</key>
+				<string>IOAccelerator</string>
+				<key>MetalPluginName</key>
+				<string>AppleParavirtGPUMetal</string>
+				<key>MetalPluginClassName</key>
+				<string>AppleParavirtDevice</string>
+			</dict>
 		</dict>
 	</dict>
 	<key>OSBundleLibraries</key>
