@@ -177,6 +177,49 @@ qemu-system-x86_64 ... -device apple-gfx-pci ...
 
 Rule of thumb: `vcpus + gpu_cores <= host_cores - 2`. Reset-only; the env var (`LP_NUM_THREADS`) is read by Mesa once at Vulkan ICD init, so mid-VM changes are ignored.
 
+## Memory backend — memfd with share=on (apple-gfx-pci requirement)
+
+`launch.sh` invokes QEMU with:
+
+```
+-m <RAM>000 \
+-object memory-backend-memfd,id=mem,size=<RAM>000M,share=on \
+-machine q35,accel=kvm,memory-backend=mem \
+```
+
+not the naive `-m <RAM>000` alone. This is a **functional** requirement, not an
+optimisation: the apple-gfx-pci device's host-side backend
+(`libapplegfx-vulkan`) aliases guest RAM into the library's per-task VA via
+`mremap(old_size=0, MREMAP_FIXED|MREMAP_MAYMOVE, ...)`. The `old_size=0`
+duplicate-VMA trick only works against a `MAP_SHARED` source — which `memfd`
+with `share=on` provides and which the default anonymous `-m` path does not.
+
+Fallback behaviour (anonymous `-m` alone): `mremap` returns `EINVAL`,
+the library logs a loud degraded-coherence warning, and all guest→host DMA
+ranges go through a one-shot `memcpy` at map time. That's OK for Phase 1
+(empty command buffers) but silently breaks Phase 2's `CmdExecIndirect2`
+indirect-buffer re-reads — see
+`/Users/mjackson/libapplegfx-vulkan/docs/memory-coherence-audit.md` and
+`/Users/mjackson/mos/paravirt-re/phase-2-first-pixel-plan.md` §8 item 4.
+
+Alpine's musl QEMU supports `memory-backend-memfd` (it just uses
+`memfd_create(2)`, which is a kernel syscall, not a glibc feature), so no
+build-time toggle is required.
+
+Startup confirmation:
+
+```
+$ docker logs macos-macos-1 | grep 'Memory backend'
+Memory backend: memfd (share=on), size=16000M
+```
+
+To verify at runtime that QEMU wired the backend correctly:
+
+```
+$ sudo docker exec macos-macos-1 ps auxww | grep -oE 'memory-backend-memfd[^ ]*'
+memory-backend-memfd,id=mem,size=16000M,share=on
+```
+
 ## pc-bios overlay pattern
 
 Same `cp` overlay approach as `hw/display/*` applies to `pc-bios/`. The Dockerfile copies `pc-bios/meson.build` (replaces upstream to add `apple-gfx-pci.rom` to the installed blobs list) and the ROM blob itself (`pc-bios/apple-gfx-pci.rom`, 16896 bytes) from the qemu-mos15 tarball over the freshly extracted QEMU 10.2.2 tree before `./configure`.

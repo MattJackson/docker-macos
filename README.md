@@ -98,13 +98,46 @@ default without editing the file.
 
 | Env var | Default | Meaning |
 |---|---|---|
-| `RAM` | `16` | VM RAM in GB. Install needs >=24; steady-state 16 is comfortable. |
+| `RAM` | `16` | VM RAM in GB. Install needs >=24; steady-state 16 is comfortable. Backed by `memory-backend-memfd,share=on` (see note below). |
 | `SMP` | `16` | vCPU sockets x threads. |
 | `CORES` | `16` | vCPU cores per socket. |
 | `DISK_SIZE` | `256G` | Disk size on first launch. |
 | `VGAMEM_MB` | `512` | VMware SVGA framebuffer VRAM (capped at 512 MB device-side). |
 | `HOST_IFACE` | `eth0` | Host NIC for macvtap bridge; find with `ip addr show`. |
 | `GPU_CORES` | `0` | Lavapipe worker-thread budget for the apple-gfx-pci display (see below). |
+
+### Guest RAM backing — `memory-backend-memfd,share=on` (Phase 2 requirement)
+
+`launch.sh` wires guest RAM via
+
+```
+-object memory-backend-memfd,id=mem,size=<RAM>000M,share=on
+-machine q35,accel=kvm,memory-backend=mem
+```
+
+rather than a bare `-m <N>`. This is a **hard requirement for the apple-gfx-pci
+paravirt GPU**, not a performance knob. The host-side library
+(`libapplegfx-vulkan`) aliases guest RAM into its per-task VA via
+`mremap(old_size=0, MREMAP_FIXED|MREMAP_MAYMOVE, ...)`, which only works when
+the source VMA is `MAP_SHARED` — exactly what memfd with `share=on` provides.
+With the default anonymous `-m N` path the source VMA is `MAP_PRIVATE` and
+`mremap` returns `EINVAL`; the library then falls back to a copy-on-map path
+that silently breaks guest-writable DMA coherence (e.g. the
+`CmdExecIndirect2` indirect command buffer re-reads that Phase 2 first-pixel
+depends on).
+
+- Full audit + rationale:
+  [`libapplegfx-vulkan/docs/memory-coherence-audit.md`](../libapplegfx-vulkan/docs/memory-coherence-audit.md)
+- Phase-2 entry dependency: [`phase-2-first-pixel-plan.md`](../mos/paravirt-re/phase-2-first-pixel-plan.md) §8 item 4.
+
+**How to confirm it's active:** `launch.sh` logs at startup:
+
+```
+Memory backend: memfd (share=on), size=16000M
+  -> required by apple-gfx-pci mremap-alias path for Phase 2 coherence
+```
+
+Tail with `docker logs macos-macos-1 | grep -E 'Memory backend'`.
 
 ### `GPU_CORES` — apple-gfx-pci lavapipe worker budget
 

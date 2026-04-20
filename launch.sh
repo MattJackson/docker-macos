@@ -59,6 +59,26 @@ else
     echo "Boot mode"
 fi
 
+# ---------------------------------------------------------------------------
+# Memory backend — MUST be memfd-backed with share=on.
+#
+# The apple-gfx-pci path's libapplegfx-vulkan uses mremap(old_size=0) to alias
+# QEMU's guest RAM pages into the host library's task VA (see
+# lagfx_task_map_host_memory). mremap's duplicate-VMA semantics require the
+# source VMA to be MAP_SHARED. QEMU's default "-m N" path uses anonymous
+# MAP_PRIVATE pages, which fails the precondition and forces the library into
+# its copy-on-map fallback — breaking Phase 2 guest-writable coherence
+# (CmdExecIndirect2 indirect buffer re-reads, etc.).
+#
+# Spec: /Users/mjackson/libapplegfx-vulkan/docs/memory-coherence-audit.md §4
+#       /Users/mjackson/mos/paravirt-re/phase-2-first-pixel-plan.md §8 item 4
+# ---------------------------------------------------------------------------
+RAM_GB="${RAM:-4}"
+RAM_MB_STR="${RAM_GB}000"   # legacy GB-ish scaling kept (16 GB -> "16000" MB)
+MEM_BACKEND="memory-backend-memfd,id=mem,size=${RAM_MB_STR}M,share=on"
+echo "Memory backend: memfd (share=on), size=${RAM_MB_STR}M"
+echo "  -> required by apple-gfx-pci mremap-alias path for Phase 2 coherence"
+
 # Bridged networking via macvtap
 HOST_IFACE="${HOST_IFACE:-enp131s0f0}"
 ip link del macvtap0 2>/dev/null || true
@@ -77,9 +97,10 @@ MAC=$(cat /sys/class/net/macvtap0/address)
 exec 3<>"${TAP_DEV}"
 
 echo "Starting macOS VM (MAC=${MAC})..."
-exec qemu-system-x86_64 -m "${RAM:-4}000" \
+exec qemu-system-x86_64 -m "${RAM_MB_STR}" \
+    -object "${MEM_BACKEND}" \
     -cpu "${CPU_MODEL:-host}",vendor=GenuineIntel,vmware-cpuid-freq=on \
-    -machine q35,accel=kvm \
+    -machine q35,accel=kvm,memory-backend=mem \
     -smp "${SMP:-4}",cores="${CORES:-4}" \
     -device qemu-xhci,id=xhci \
     -device apple-kbd,bus=xhci.0 \

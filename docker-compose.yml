@@ -6,7 +6,11 @@ services:
     environment:
       - IMAGE_PATH=/image                  # path inside the container; bind-mount below maps it to host
       - HOST_IFACE=eth0                    # CHANGE ME — your host network interface (find with `ip addr show`)
-      - RAM=16                             # GB. Install needs 24 minimum; steady-state 16 is comfortable
+      - RAM=16                             # GB. Install needs 24 minimum; steady-state 16 is comfortable.
+                                           # Guest RAM is wired via -object memory-backend-memfd,share=on
+                                           # (see launch.sh). Required for the apple-gfx-pci paravirt GPU to
+                                           # alias guest pages into the host library's task VA. See
+                                           # libapplegfx-vulkan/docs/memory-coherence-audit.md.
       - SMP=16                             # vCPU sockets/threads
       - CORES=16                           # vCPU cores per socket
       - DISK_SIZE=256G                     # Created on first launch if mac_hdd_ng.img is empty
