@@ -1,0 +1,39 @@
+# Kernel-panic and hard-fault signatures.
+# Any match in capture-boot-log.sh trips the "panic" stop trigger.
+# Line format: <category>|<severity>|<regex>|<description>
+# See README.md for authoring rules.
+
+# --- Classic XNU panic markers (generic, high-confidence) ------------------
+panic|fatal|panic\(cpu [0-9]+ caller|XNU panic: caller-prefixed per-cpu header
+panic|fatal|Kernel trap at|kernel_trap — unhandled trap (#GP, #PF, etc.)
+panic|fatal|Kernel panic|generic "Kernel panic" string in serial
+panic|fatal|Debugger called:|XNU Debugger entry (often precedes panic dump)
+panic|fatal|Backtrace \(CPU [0-9]+\)|panic backtrace header (CPU frames follow)
+
+# --- Kext-load failures (fatal if critical, warn otherwise) ---------------
+kext-fail|error|KERN_FAILURE during kext load|IOKit kext load failed with KERN_FAILURE
+kext-fail|error|Kext .* failed to load|generic kext-load failure
+kext-fail|warn|kext .* could not be authenticated|signature / TeamID verification failed
+kext-fail|warn|kxld\[.*\]: link failed|linker failure during kext staging
+
+# --- Apple-gfx specific panics (our surface) -------------------------------
+apple-gfx|fatal|AppleParavirtGPU.*assert|AppleParavirtGPU KASSERT triggered
+apple-gfx|fatal|AppleParavirtGPU.*panic|AppleParavirtGPU explicit panic
+apple-gfx|fatal|apple[_-]gfx.*fault|apple-gfx fault (MMIO / decoder)
+apple-gfx|fatal|apple-gfx-pci.*panic|apple-gfx-pci device-side panic
+apple-gfx|error|apple[_-]gfx.*bad.opcode|decoder hit an opcode it does not handle
+apple-gfx|error|apple[_-]gfx.*truncated cmdbuf|cmdbuf ended mid-opcode; length mismatch
+
+# --- QEMU-side fatal signals (container stdout) ----------------------------
+qemu|fatal|qemu-system-x86_64:.*error:|QEMU aborted at startup or during run
+qemu|fatal|qemu-system-x86_64:.*assert|QEMU internal assertion failed
+qemu|fatal|qemu: fatal:|QEMU CPU fault reporter (invalid op, etc.)
+
+# --- Memory / allocation fatal cases ---------------------------------------
+memory|fatal|out of memory|OOM killer, guest or host
+memory|fatal|page fault in kernel mode|unhandled kernel-mode page fault
+memory|fatal|zone map exhausted|XNU zalloc exhaustion
+
+# --- Double panic / early panic --------------------------------------------
+panic|fatal|Double panic|XNU double-panic (second panic during first's dump)
+panic|fatal|Early boot panic|XNU panic before full console is up

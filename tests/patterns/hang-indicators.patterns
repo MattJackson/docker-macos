@@ -1,0 +1,39 @@
+# Common "boot got stuck" fingerprints. Unlike panic.patterns, a match
+# here does NOT trip capture-boot-log.sh's early-stop trigger — these
+# are informative signals, not terminal ones. analyze-boot-log.sh
+# reports them alongside the stalled-timestamp watchdog.
+# Line format: <category>|<severity>|<regex>|<description>
+
+# --- Looping service starts (the "restart storm") --------------------------
+hang|warn|launchd.*respawning|launchd respawn loop on a service
+hang|warn|launchd.*throttle|launchd throttling a repeatedly-crashing job
+
+# --- Wait-for-hardware hangs -----------------------------------------------
+hang|warn|Waiting for device|IOKit busy-waiting on a device match (20+ s)
+hang|warn|IODeviceTreeSupport: waiting|devicetree publish waiting for provider
+hang|warn|IOPMrootDomain.*wait|root power domain stuck waiting
+
+# --- DHCP / network-layer hangs --------------------------------------------
+hang|warn|configd: DHCP.*Retrying|DHCP retry loop (~30 s each)
+hang|warn|configd.*Waiting for network|configd network wait
+
+# --- Kext matching hangs ---------------------------------------------------
+hang|warn|kextd.*queue length [1-9][0-9]+|kextd backlog > 10 pending loads
+hang|warn|IOService::waitForMatching|waitForMatching timer pinned
+
+# --- Filesystem / APFS stalls ---------------------------------------------
+hang|warn|apfs.*timeout|APFS IO timeout
+hang|warn|hfs.*waiting for mount|HFS waiting for device to appear
+
+# --- Our stack's silent-failure fingerprints (apple-gfx) ------------------
+hang|warn|lagfx.*waiting for|libapplegfx-vulkan waiting on a host-side handshake
+hang|warn|AppleParavirtGPU.*probe timeout|AppleParavirtGPU probe exceeded deadline
+hang|warn|apple-gfx-pci.*no ack|apple-gfx-pci MMIO write without device ack
+
+# --- Watchdog-adjacent kernel messages ------------------------------------
+hang|warn|hangdetector|XNU hang-detector fired (soft-hang warning)
+hang|warn|stackshot|diagnosticd stackshot triggered (usually hang-adjacent)
+
+# --- loginwindow hangs (guest reached login but froze) --------------------
+hang|warn|loginwindow.*spinning|loginwindow spinner stuck
+hang|warn|WindowServer.*no frames|WindowServer running but not emitting frames

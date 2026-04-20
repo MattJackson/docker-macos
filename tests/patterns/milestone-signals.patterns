@@ -1,0 +1,56 @@
+# Milestone-reached positive signatures.
+# One (or more) match per milestone tag marks that milestone as "passed"
+# in analyze-boot-log.sh's JSON output. Absence = "unknown" (NOT "failed").
+# Line format: <category>|<severity>|<regex>|<description>
+# Canonical milestone definitions: see docs/end-to-end-integration-guide.md §3.
+
+# --- M1 — boot reaches userspace, no-panic floor --------------------------
+m1|info|OpenCore [0-9]+\.[0-9]+|OpenCore banner — UEFI handoff reached
+m1|info|EB\|#LOG:EXITBS:START|OpenCore exit-boot-services (kernel handoff)
+m1|info|AppleSMC.*registered|AppleSMC registered — early kernel boot complete
+m1|info|hfs: mounted|root filesystem mounted
+m1|info|efibootmgr|EFI boot manager (alt UEFI path)
+m1|info|loginwindow|loginwindow process started — userspace alive
+m1|info|WindowServer|WindowServer process started — graphics stack alive
+
+# --- M2 — AppleParavirtGPU kext binds, MMIO reaches decoder ---------------
+m2|info|AppleParavirtGPU::start|AppleParavirtGPU::start() invoked (kext binding)
+m2|info|AppleParavirtGPU.*registered|AppleParavirtGPU published its IOService
+m2|info|apple-gfx-pci.*matched|apple-gfx-pci PCI match succeeded
+m2|info|apple_gfx_pci_realize|QEMU trace: apple-gfx-pci device realize() fired
+m2|info|apple_gfx_pci_reset|QEMU trace: apple-gfx-pci reset — MMIO path touched
+m2|info|vendor-id.*0x106b|Apple vendor-id 0x106b probed by PCI match
+m2|info|kextd.*AppleParavirtGPU|kextd registered AppleParavirtGPU load event
+
+# --- M3 — metal-no-op round-trip (empty cmdbuf completes) -----------------
+m3|info|MTLCreateSystemDefaultDevice returned non-null|Metal device enumerated
+m3|info|lagfx_device_new|libapplegfx-vulkan created a device
+m3|info|lagfx_cmdbuf_submit|libapplegfx-vulkan received a cmdbuf submit
+m3|info|lagfx_cmdbuf_complete|libapplegfx-vulkan completed a cmdbuf
+m3|info|applegfx.*commit|decoder saw a commit event (guest-to-host path live)
+m3|info|applegfx.*cmdbuf.*done|decoder finished a cmdbuf (completion ACK)
+
+# --- M4 — first pixel (Metal clear-color through stack) -------------------
+m4|info|dpy_gfx_update|QEMU dpy_gfx_update fired (frame reached display backend)
+m4|info|lagfx_clear_color|libapplegfx-vulkan clear-color op decoded
+m4|info|first Vulkan frame|first Vulkan frame dispatch log
+m4|info|vkQueueSubmit.*clear|Vulkan clear submission
+
+# --- M5 — first shader (triangle via AIR→SPIR-V→lavapipe) -----------------
+m5|info|lagfx_pipeline_new|libapplegfx-vulkan pipeline created
+m5|info|shader-catalog.*hit|shader catalog fallback lookup succeeded
+m5|info|vkCmdDraw|Vulkan draw-call recorded
+m5|info|lagfx_draw_indexed|libapplegfx-vulkan draw recorded
+
+# --- M6 — login screen composited through our stack -----------------------
+m6|info|loginwindow.*ready|loginwindow signalled ready
+m6|info|WindowServer.*registered|WindowServer published service
+m6|info|CoreAnimation.*present|CoreAnimation presenter active
+
+# --- M7 — Dock + menu bar + idle desktop compositing ---------------------
+m7|info|Dock.*launched|Dock launched
+m7|info|WindowServer.*idle|WindowServer entered idle compositing
+m7|info|SpringBoard-like loop|steady idle-repaint loop observed
+
+# --- M8 — sustained 30fps (perf harness — Phase 5) ------------------------
+m8|info|fps_sample [3-9][0-9]\.|fps sample >= 30 emitted by perf harness
