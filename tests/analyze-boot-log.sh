@@ -194,7 +194,10 @@ FOUND_JSON=""
 MISSING_JSON=""
 PANIC_JSON=""
 HANG_JSON=""
-declare -A MILESTONE_PASSED=()   # key: "m1","m2",... ; value: 1 if seen
+# macOS ships bash 3.2 which has no associative arrays. Use a flat
+# space-delimited list of "passed" milestone tags instead — e.g.
+# MILESTONE_PASSED=" m1 m2 ". Lookup: `case "$MP" in *" m2 "*) ...`.
+MILESTONE_PASSED=" "
 PANIC_FOUND=0
 
 i=0
@@ -222,7 +225,10 @@ while [ "$i" -lt "$PATTERN_COUNT" ]; do
         # Dispatch by category family.
         case "$cat" in
             m[1-8])
-                MILESTONE_PASSED["$cat"]=1
+                case "$MILESTONE_PASSED" in
+                    *" $cat "*) : ;;
+                    *) MILESTONE_PASSED="$MILESTONE_PASSED$cat " ;;
+                esac
                 FOUND_JSON="${FOUND_JSON:+$FOUND_JSON,}$entry"
                 ;;
             panic|kext-fail|apple-gfx|qemu|memory)
@@ -260,7 +266,9 @@ done
 MILESTONES_JSON=""
 for m in m1 m2 m3 m4 m5 m6 m7 m8; do
     state="unknown"
-    [ "${MILESTONE_PASSED[$m]:-0}" = "1" ] && state="passed"
+    case "$MILESTONE_PASSED" in
+        *" $m "*) state="passed" ;;
+    esac
     entry=$(printf '%s:%s' "$(json_quote "$m")" "$(json_quote "$state")")
     MILESTONES_JSON="${MILESTONES_JSON:+$MILESTONES_JSON,}$entry"
 done
@@ -325,10 +333,13 @@ fi
 
 MISSING_EXPECTED=0
 for m in "${EXPECTED_MILESTONES[@]}"; do
-    if [ "${MILESTONE_PASSED[$m]:-0}" != "1" ]; then
-        MISSING_EXPECTED=$((MISSING_EXPECTED + 1))
-        warn "$m — no passing marker found"
-    fi
+    case "$MILESTONE_PASSED" in
+        *" $m "*) : ;;
+        *)
+            MISSING_EXPECTED=$((MISSING_EXPECTED + 1))
+            warn "$m — no passing marker found"
+            ;;
+    esac
 done
 
 # If the capture was stopped by SSH-up (status==good) and M1 at least
