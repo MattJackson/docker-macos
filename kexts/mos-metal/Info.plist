@@ -55,6 +55,8 @@
 		<string>8.0.0</string>
 		<key>com.apple.kpi.mach</key>
 		<string>8.0.0</string>
+		<key>com.docker-macos.kext.mos15Patcher</key>
+		<string>1.0.0</string>
 	</dict>
 </dict>
 </plist>
