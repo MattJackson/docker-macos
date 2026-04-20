@@ -1,0 +1,177 @@
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+    branches: [main]
+
+jobs:
+  # -------------------------------------------------------------------------
+  # bash -n — POSIX-level parse check. Catches unterminated quotes, missing
+  # `fi`/`done`, syntax typos. Fast, runs against every shell script in the
+  # repo (root-level *.sh + tests/*.sh).
+  # -------------------------------------------------------------------------
+  bash-syntax:
+    name: bash -n (all shell scripts)
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: bash -n on every .sh
+        run: |
+          set -e
+          failed=0
+          # Root-level + tests/ subdir. If we grow scripts/ or bin/ dirs,
+          # add them to this find invocation.
+          while IFS= read -r -d '' f; do
+            if ! bash -n "$f"; then
+              echo "::error file=$f::bash -n syntax error"
+              failed=1
+            else
+              echo "ok: $f"
+            fi
+          done < <(find . -type f -name '*.sh' \
+                     -not -path './.git/*' \
+                     -not -path './builds/*' \
+                     -not -path './kexts/deps/*' \
+                     -not -path './efi/*' \
+                     -print0)
+          exit "$failed"
+
+  # -------------------------------------------------------------------------
+  # shellcheck — static lint. Flags unquoted expansions, typos, unsafe
+  # patterns. We run with warn-only for now (|| true on the summary) to
+  # allow gradual adoption; once the backlog is clean, remove `|| true`.
+  # -------------------------------------------------------------------------
+  shellcheck:
+    name: shellcheck (warn-only, gradual adoption)
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Cache apt packages
+        uses: actions/cache@v4
+        with:
+          path: /var/cache/apt/archives
+          key: apt-${{ runner.os }}-shellcheck-v1-${{ hashFiles('.github/workflows/ci.yml') }}
+          restore-keys: |
+            apt-${{ runner.os }}-shellcheck-v1-
+
+      - name: Install shellcheck
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y --no-install-recommends shellcheck
+
+      - name: Run shellcheck
+        run: |
+          # -x lets shellcheck follow `source`d files. -S warning skips
+          # style-only notes; we care about actual bugs for now.
+          # `|| true` keeps this warn-only: findings print but don't fail CI.
+          # Flip to hard-fail once the backlog is cleared.
+          find . -type f -name '*.sh' \
+            -not -path './.git/*' \
+            -not -path './builds/*' \
+            -not -path './kexts/deps/*' \
+            -not -path './efi/*' \
+            -print0 \
+            | xargs -0 shellcheck -x -S warning || true
+
+  # -------------------------------------------------------------------------
+  # hadolint — Dockerfile linter. Flags pinning issues, shell problems in
+  # RUN lines, deprecated syntax. Uses the official hadolint action.
+  # -------------------------------------------------------------------------
+  hadolint:
+    name: hadolint (Dockerfile)
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Run hadolint
+        uses: hadolint/hadolint-action@v3.1.0
+        with:
+          dockerfile: Dockerfile
+          # Ignore: DL3008 (pin apk versions) — Alpine is rolling; we pin the
+          # Alpine base tag, not individual apks. DL3018 same reasoning.
+          # DL3059 (multiple consecutive RUN) — intentional for Docker layer
+          # cache granularity; see Dockerfile comments.
+          ignore: DL3008,DL3018,DL3059
+          failure-threshold: warning
+
+  # -------------------------------------------------------------------------
+  # markdownlint — docs lint. Catches broken markdown (unclosed code fences,
+  # inconsistent heading levels, unresolvable relative links).
+  # -------------------------------------------------------------------------
+  markdownlint:
+    name: markdownlint (README + docs/)
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Install markdownlint-cli2
+        run: |
+          # markdownlint-cli2 is maintained and faster than v1. No sudo:
+          # npm global install goes under the runner user's npm prefix.
+          npm install -g markdownlint-cli2@0.13.0
+
+      - name: Lint Markdown
+        run: |
+          # Default rule set is opinionated; warn-only via `|| true` until
+          # we have a repo-level .markdownlint.jsonc. README is the only
+          # external-facing doc — if it parses, we ship.
+          markdownlint-cli2 \
+            "README.md" \
+            "SETUP.md" \
+            "TESTING.md" \
+            "CONTRIBUTING.md" \
+            "TODO.md" \
+            "docs/**/*.md" \
+            || true
+
+  # -------------------------------------------------------------------------
+  # docker compose config — validates docker-compose.yml schema + variable
+  # interpolation. Fast and cheap; catches misnamed services, YAML errors,
+  # and ${VAR} references to unset env.
+  # -------------------------------------------------------------------------
+  compose-validate:
+    name: docker compose config
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Validate compose
+        run: |
+          # GITHUB_RUNNER images ship with docker + compose plugin.
+          # `config` prints the fully-rendered file; `--quiet` suppresses
+          # output on success and keeps exit code meaningful.
+          # Supply defaults for vars referenced via ${FOO:-default} so the
+          # parser is happy even without a .env file.
+          docker compose config --quiet
+
+  # -------------------------------------------------------------------------
+  # Dockerfile dry-build — verifies the first few layers are internally
+  # consistent (valid FROM, ARG/ENV use, COPY paths). We do NOT build the
+  # QEMU stage (15+ min, needs network), we just parse up to the first COPY
+  # that references files outside the repo.
+  #
+  # Approach: `docker buildx build --target builder --check` parses the
+  # Dockerfile and surfaces lint warnings without actually building.
+  # -------------------------------------------------------------------------
+  dockerfile-check:
+    name: dockerfile buildx check (no build)
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@v3
+
+      - name: Dockerfile check (parse + frontend lint)
+        run: |
+          # buildx's `--check` runs BuildKit's frontend validator against
+          # the Dockerfile: syntax, stage graph, ARG scoping, etc. It does
+          # NOT execute RUN instructions, so it's fast and network-free.
+          docker buildx build --check . || {
+            echo "::error::Dockerfile failed buildx --check"
+            exit 1
+          }
