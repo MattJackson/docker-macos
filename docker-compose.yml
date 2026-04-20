@@ -11,6 +11,12 @@ services:
       - CORES=16                           # vCPU cores per socket
       - DISK_SIZE=256G                     # Created on first launch if mac_hdd_ng.img is empty
       - VGAMEM_MB=512                      # VMware SVGA framebuffer VRAM. Device-side max is 512 MB; higher requests are silently capped.
+      # Example for the (future) apple-gfx-pci display path: set -device
+      # apple-gfx-pci,gpu_cores=8 in launch.sh to cap lavapipe's
+      # worker-thread pool. 0 (the default) lets lavapipe use host core
+      # count. Accepted range 0..64. See
+      # docs/qemu-mos15-build.md#tuning-gpu_cores-on-the-apple-gfx-pci-device.
+      # - GPU_CORES=8
     volumes:
       - ./mac_hdd_ng.img:/image            # The macOS install/runtime disk. Touch this file empty to trigger install mode.
       - ./launch.sh:/opt/macos/launch.sh:ro  # Source-of-truth launch.sh from this repo; lets env vars actually apply

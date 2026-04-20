@@ -163,6 +163,20 @@ See `~/mos/qemu-mos15/README.md` for the Dockerfile-based build.
 
 ---
 
+## Tuning `gpu_cores` on the `apple-gfx-pci` device
+
+The `apple-gfx-pci` device (from qemu-mos15) exposes a `gpu_cores` property that caps the lavapipe (Mesa CPU Vulkan) worker-thread pool. This is the operator knob for the performance/footprint trade-off — see `mos/memory/project_tunable_gpu_cores.md`.
+
+```bash
+# 8 lavapipe worker threads (sensible for an 8-core guest on a 16-core host)
+qemu-system-x86_64 ... -device apple-gfx-pci,gpu_cores=8 ...
+
+# Unset (0) -> lavapipe uses its default of host core count
+qemu-system-x86_64 ... -device apple-gfx-pci ...
+```
+
+Rule of thumb: `vcpus + gpu_cores <= host_cores - 2`. Reset-only; the env var (`LP_NUM_THREADS`) is read by Mesa once at Vulkan ICD init, so mid-VM changes are ignored.
+
 ## pc-bios overlay pattern
 
 Same `cp` overlay approach as `hw/display/*` applies to `pc-bios/`. The Dockerfile copies `pc-bios/meson.build` (replaces upstream to add `apple-gfx-pci.rom` to the installed blobs list) and the ROM blob itself (`pc-bios/apple-gfx-pci.rom`, 16896 bytes) from the qemu-mos15 tarball over the freshly extracted QEMU 10.2.2 tree before `./configure`.
