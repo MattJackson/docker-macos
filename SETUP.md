@@ -31,7 +31,8 @@ mkdir ~/mos && cd ~/mos
 git clone https://github.com/MattJackson/mos-docker
 git clone https://github.com/MattJackson/mos-patcher
 git clone https://github.com/MattJackson/mos-qemu
-git clone https://github.com/MattJackson/mos-opencore   # optional; not on active path
+# mos-opencore is NOT needed — the product ships vanilla acidanthera/OpenCorePkg 1.0.7.
+# Clone it only if you're working on the upstream-PR staging branch.
 ```
 
 ## Step 2 — Get the macOS recovery image

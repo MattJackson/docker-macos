@@ -24,14 +24,20 @@ macOS Sequoia (15.7.5) running in Docker on Linux+KVM, with patched QEMU + a ker
 | **mos-docker** (this) | Dockerfile, build pipeline, kext source, OpenCore config, the orchestration |
 | [mos-qemu](https://github.com/MattJackson/mos-qemu) | QEMU patches — `applesmc`, `vmware_vga`, `dev-hid` |
 | [mos-patcher](https://github.com/MattJackson/mos-patcher) | Kernel-side hook framework (Lilu replacement, ~700 LOC) |
-| [mos-opencore](https://github.com/MattJackson/mos-opencore) | OpenCore patches — System KC injection (research, not active path) |
+| [mos-opencore](https://github.com/MattJackson/mos-opencore) | Upstream-PR staging for a System KC loading feature; **not used in this product**. |
+
+### OpenCore
+
+The bootloader is vanilla [acidanthera/OpenCorePkg 1.0.7](https://github.com/acidanthera/OpenCorePkg/releases/tag/1.0.7) — no custom patches. Every `.efi` under `efi/EFI/OC/` (OpenCore.efi, BOOTx64.efi, Drivers/, Resources/) comes from the upstream release tarball; only our own `config.plist` and ACPI tables are project-owned. Credit to [acidanthera](https://github.com/acidanthera) for OpenCore.
+
+The `mos-opencore` fork is kept alive as a staging branch for an upstream PR (System KC loading for cross-KC kext deps). It was used during the Branch A research phase (rev 6) and is orphaned on our current product path. Do not expect product changes to land there.
 
 ## Architecture
 
 ```
 QEMU mos15  (95+ SMC keys, 4K VMware SVGA, Apple USB HID)
   └── KVM acceleration  (-cpu host)
-        └── OpenCore                     (boots SMBIOS iMac20,1, injects Boot KC kexts)
+        └── OpenCore 1.0.7 (vanilla)     (boots SMBIOS iMac20,1, injects Boot KC kexts)
               ├── mos15-patcher.kext     (kernel hook framework — Lilu replacement)
               └── QEMUDisplayPatcher.kext  (24 IOFramebuffer-method hooks)
                     └── macOS Sequoia 15.7.5
@@ -70,9 +76,9 @@ For the deploy walk-through with expected pass/fail signals, see [`docs/test-run
 |---|---|---|
 | `efi/EFI/OC/config.plist` | Yes | OpenCore configuration |
 | `efi/EFI/OC/ACPI/*.aml` | Yes | ACPI tables |
-| `efi/EFI/OC/Drivers/*.efi` | Yes | UEFI drivers from upstream OC release |
-| `efi/EFI/OC/Resources/` | Yes | OC GUI assets from upstream OC release |
-| `efi/EFI/OC/OpenCore.efi`, `efi/EFI/BOOT/BOOTx64.efi` | Yes | Currently extracted from a previous build (TODO: rebuild from `opencore-mos15` source in pipeline) |
+| `efi/EFI/OC/Drivers/*.efi` | Yes | UEFI drivers from vanilla acidanthera/OpenCorePkg 1.0.7 release |
+| `efi/EFI/OC/Resources/` | Yes | OC GUI assets from vanilla acidanthera/OpenCorePkg 1.0.7 release |
+| `efi/EFI/OC/OpenCore.efi`, `efi/EFI/BOOT/BOOTx64.efi` | Yes | Extracted from vanilla acidanthera/OpenCorePkg 1.0.7 release tarball |
 | `kexts/deps/mos15-patcher.kext` | No (build artifact) | Build of `mos15-patcher` repo |
 | `kexts/QEMUDisplayPatcher/build/QEMUDisplayPatcher.kext` | No (build artifact) | Build of `kexts/QEMUDisplayPatcher/` |
 | `~/mos-staging/SystemKernelExtensions.kc` | No (349 MB) | Extracted from a running VM, kept in private docs repo |

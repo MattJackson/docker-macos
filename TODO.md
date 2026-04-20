@@ -11,7 +11,7 @@ Zero-kext macOS 15 in Docker. Fix the hardware, not the driver.
 - [ ] Raise max resolution — 3840×2160 (was 2368×1770). **Add alone first, test, then add caps**
 - [ ] Add capabilities ONE AT A TIME — extended FIFO, pitchlock, alpha blend, multimon. Last attempt adding all at once caused a hang
 - [ ] Test if macOS loads a better built-in driver with improved hardware
-- [ ] If still "No Kext Loaded" — finish QEMUDisplay injection (70% done in opencore-mos15)
+- [ ] If still "No Kext Loaded" — revisit kext injection via config.plist on vanilla OpenCore 1.0.7
 
 ## Priority 2: QEMU SMC (`applesmc.c`)
 
@@ -70,8 +70,7 @@ HE0N, MSDW, NTOK
 
 ```
 github.com/MattJackson/mos-qemu       ← QEMU patches (3 files)
-github.com/MattJackson/mos-opencore   ← OpenCore patches (if needed)
-github.com/MattJackson/mos-docker     ← Docker image
+github.com/MattJackson/mos-docker     ← Docker image (ships vanilla acidanthera OpenCorePkg 1.0.7)
 ```
 
 ## Current State

@@ -7,7 +7,7 @@ This project is one of four repos working together to run macOS Sequoia in Docke
 - **docker-macos** (this repo) — orchestration: Docker image, build pipeline, kext source, OpenCore config, tests, runbook
 - **[mos-patcher](https://github.com/MattJackson/mos-patcher)** — kernel-side hook framework (Lilu replacement, ~700 LOC we own)
 - **[mos-qemu](https://github.com/MattJackson/mos-qemu)** — patches to QEMU 10.2.2 (`applesmc`, `vmware_vga`, `dev-hid`)
-- **[mos-opencore](https://github.com/MattJackson/mos-opencore)** — OpenCore patches (System KC injection — research, not active path)
+- **[mos-opencore](https://github.com/MattJackson/mos-opencore)** — upstream-PR staging for a System KC loading feature. **Not used in this product** — the Docker image ships vanilla [acidanthera/OpenCorePkg 1.0.7](https://github.com/acidanthera/OpenCorePkg).
 
 A change to anything user-visible usually touches at least two of these. Cross-link in commit messages.
 

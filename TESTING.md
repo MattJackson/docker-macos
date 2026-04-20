@@ -32,4 +32,4 @@
 ## Display
 - vmware-svga: 7MB VRAM (Apple driver hardcoded limit)
 - Screen Sharing: works on Sequoia, crashes WindowServer on Tahoe
-- VMsvga2 kext: OpenCore injection failed (binary too old), GitHub Actions build pending
+- VMsvga2 kext: OpenCore injection failed (binary too old for macOS 15); rebuild pending

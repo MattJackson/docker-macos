@@ -1,10 +1,12 @@
 #!/bin/bash
 # Build a mos15 image — bootable EFI volume that loads macOS 15 (Sequoia)
-# in our forked QEMU. mos15 = qemu-mos15 + opencore-mos15 + lilu-mos15 + Sequoia.
+# in our forked QEMU. mos15 = qemu-mos15 + vanilla OpenCorePkg 1.0.7 + mos-patcher + Sequoia.
 #
 # Inputs (everything that defines what's running):
-#   efi/                                                       tracked — config.plist, ACPI, Drivers, Resources, OC/BOOT EFIs
-#   kexts/deps/Lilu-mos15-DEBUG.kext                           built from MattJackson/lilu-mos15
+#   efi/                                                       tracked — config.plist, ACPI, plus
+#                                                              Drivers, Resources, OC.efi, BOOTx64.efi
+#                                                              extracted from vanilla acidanthera/OpenCorePkg 1.0.7
+#   kexts/deps/mos15-patcher.kext                              built from MattJackson/mos-patcher
 #   kexts/QEMUDisplayPatcher/build/QEMUDisplayPatcher.kext     built from kexts/QEMUDisplayPatcher/
 #   $SYSTEM_KC                                                 System KC (349MB, version-locked to macOS 15.7.5).
 #                                                              Default: ~/mos-staging/SystemKernelExtensions.kc
@@ -14,9 +16,9 @@
 #   builds/mos15_YYYYMMDDHHMMSS.img    timestamped, gitignored, reproducible from inputs
 #   mos15.img -> builds/<latest>       symlink to most recent build (gitignored)
 #
-# TODO: BOOTx64.efi, OpenCore.efi, Drivers/, Resources/ should eventually come from
-# an opencore-mos15 source build, not from a one-time production extract. Tracked in
-# efi/ for now so the pipeline reproduces today's running state.
+# OpenCore version: vanilla acidanthera/OpenCorePkg 1.0.7. To upgrade, drop the new
+# release's OpenCore.efi, BOOTx64.efi, Drivers/, Resources/ into efi/ and bump the
+# OPENCORE_VERSION ARG in Dockerfile. No custom fork is involved.
 
 set -euo pipefail
 
