@@ -50,6 +50,7 @@ RUN curl -sL https://download.qemu.org/qemu-${QEMU_VERSION}.tar.xz | tar xJ -C /
     && cp /tmp/mos-qemu-main/hw/display/apple-gfx-common-linux.c hw/display/ \
     && cp /tmp/mos-qemu-main/hw/display/apple-gfx-linux.h hw/display/ \
     && cp /tmp/mos-qemu-main/hw/display/meson.build hw/display/meson.build \
+    && cp /tmp/mos-qemu-main/hw/display/trace-events hw/display/trace-events \
     && cp /tmp/mos-qemu-main/hw/display/Kconfig hw/display/Kconfig \
     && cp /tmp/mos-qemu-main/pc-bios/meson.build pc-bios/meson.build \
     && cp /tmp/mos-qemu-main/pc-bios/apple-gfx-pci.rom pc-bios/apple-gfx-pci.rom \
