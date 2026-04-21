@@ -117,7 +117,7 @@ CURRENT_SIZE=$(stat -Lc%s "${IMAGE_PATH}" 2>/dev/null || echo 0)
 if [ "${CURRENT_SIZE}" -lt 1048576 ]; then
     echo "Empty disk (${CURRENT_SIZE} bytes) -- install mode"
     qemu-img create -f raw "${IMAGE_PATH}" "${DISK_SIZE:-256G}"
-    INSTALL_MEDIA="-drive id=InstallMedia,if=none,file=/opt/macos/recovery.img,format=raw -device ide-hd,bus=sata.3,drive=InstallMedia"
+    INSTALL_MEDIA="-drive id=InstallMedia,if=none,file=/opt/macos/recovery.img,format=raw,readonly=on -device ide-hd,bus=sata.3,drive=InstallMedia"
 else
     echo "Boot mode (disk ${CURRENT_SIZE} bytes)"
 fi
@@ -210,7 +210,7 @@ exec qemu-system-x86_64 -m "${RAM_MB_STR}" \
     -global ICH9-LPC.acpi-pci-hotplug-with-bridge-support=off \
     -smbios type=2 \
     -device ich9-ahci,id=sata \
-    -drive id=OpenCoreBoot,if=none,format=raw,file=/opt/macos/OpenCore.img \
+    -drive id=OpenCoreBoot,if=none,format=raw,file=/opt/macos/OpenCore.img,readonly=on \
     -device ide-hd,bus=sata.2,drive=OpenCoreBoot \
     ${INSTALL_MEDIA} \
     -drive id=MacHDD,if=none,file="${IMAGE_PATH}",format=raw,cache=none,aio=native \
