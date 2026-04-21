@@ -1,9 +1,22 @@
+# syntax=docker/dockerfile:1.7
 # mos suite — docker-macos
 # https://github.com/MattJackson/mos-docker
 #
 # Layered build:
 #   1. Alpine 3.21 builder stage compiles QEMU 10.2.2 with our qemu-mos15 patches
 #   2. Final Alpine runtime stage bundles QEMU + OVMF + recovery image + EFI image + launch.sh
+#
+# Cache strategy (requires BuildKit — default on Docker 23+):
+#   - `ADD <tarball-url>` layers re-check the upstream ETag/Last-Modified on
+#     every build. When libapplegfx-vulkan or mos-qemu gets a push, ONLY those
+#     layers invalidate; the apk/QEMU-upstream-tarball layers stay cached.
+#     This replaces the prior `RUN curl | tar` pattern which cached on the
+#     literal command string and silently ignored upstream pushes.
+#   - `--mount=type=cache,target=...` persists QEMU's out-of-tree build dir
+#     and ccache across builds. Even when the layer cache is invalidated, .o
+#     files are reused — full QEMU rebuild drops from ~3 min to ~20-40 s.
+#   - ccache intercepts gcc/g++ and hashes preprocessed input; it complements
+#     the build-dir cache (wins when configure flags change but sources don't).
 #
 # OpenCore: vanilla acidanthera/OpenCorePkg 1.0.7 (see OPENCORE_VERSION below).
 # The OpenCore EFI binaries (OpenCore.efi, BOOTx64.efi, Drivers/, Resources/) and
@@ -35,33 +48,115 @@ ARG OPENCORE_VERSION
 # Build QEMU from source with our qemu-mos15 patches.
 # Alpine package list is exact — `dtc-dev` is correct (NOT libfdt-dev), and
 # do NOT add libmount-dev (doesn't exist in Alpine 3.21 and isn't needed).
+# ccache is included so the --mount=type=cache,target=/root/.ccache below
+# actually has a consumer.
 RUN apk add --no-cache \
     build-base python3 ninja meson pkgconf \
     glib-dev pixman-dev libcap-ng-dev libseccomp-dev \
     libslirp-dev libaio-dev curl bash git dtc-dev \
-    mesa-vulkan-swrast vulkan-loader vulkan-headers vulkan-tools
+    mesa-vulkan-swrast vulkan-loader vulkan-headers vulkan-tools \
+    ccache
 
-# Clone and build libapplegfx-vulkan
-RUN git clone https://github.com/MattJackson/libapplegfx-vulkan.git /tmp/libapplegfx-vulkan \
+# Route gcc/g++ through ccache. `apk add ccache` installs symlinks at
+# /usr/lib/ccache/bin/{gcc,cc,g++,...}; prepending that dir to PATH means
+# any child invocation (meson, ninja, QEMU's configure) picks it up without
+# per-command CC= overrides.
+#
+# CCACHE_BASEDIR normalizes absolute paths in __FILE__ and include lookups
+# to the rootfs, so identical source cached across different container
+# invocations hashes identically. Without it, ccache's hit rate on QEMU
+# lands around 1% even when the source is bit-identical (measured 2026-04-20).
+#
+# CCACHE_SLOPPINESS=time_macros tells ccache to ignore __DATE__/__TIME__
+# expansions — QEMU's version banner uses them and would otherwise force a
+# miss on every TU that transitively includes them.
+#
+# CCACHE_COMPILERCHECK=content keys the cache off the compiler binary
+# contents rather than its mtime, so an apk upgrade of gcc that ships the
+# same binary (or a rebuild of the builder stage) doesn't nuke the cache.
+ENV PATH="/usr/lib/ccache/bin:${PATH}" \
+    CCACHE_DIR=/root/.ccache \
+    CCACHE_MAXSIZE=2G \
+    CCACHE_BASEDIR=/tmp \
+    CCACHE_SLOPPINESS=time_macros,include_file_mtime,include_file_ctime,file_macro,locale,pch_defines \
+    CCACHE_COMPILERCHECK=content \
+    CCACHE_NOHASHDIR=1
+
+# ---------------------------------------------------------------------------
+# libapplegfx-vulkan — built from the main branch of our fork.
+#
+# `ADD <url>` re-checks upstream on every build; the downloaded tarball
+# layer is only reused when GitHub serves identical content. Extract +
+# build happen in a separate RUN whose cache is keyed off the ADD layer,
+# so a push to libapplegfx-vulkan invalidates this (and only this, plus
+# anything downstream that consumes its output).
+# ---------------------------------------------------------------------------
+ADD https://github.com/MattJackson/libapplegfx-vulkan/archive/refs/heads/main.tar.gz /tmp/libapplegfx-vulkan.tar.gz
+RUN --mount=type=cache,target=/root/.ccache \
+    --mount=type=cache,target=/tmp/libapplegfx-vulkan-build \
+    mkdir -p /tmp/libapplegfx-vulkan \
+    && tar xz -C /tmp/libapplegfx-vulkan --strip-components=1 -f /tmp/libapplegfx-vulkan.tar.gz \
     && cd /tmp/libapplegfx-vulkan \
-    && meson setup --prefix=/usr --libdir=lib builddir \
-    && ninja -C builddir install
+    && meson setup --prefix=/usr --libdir=lib /tmp/libapplegfx-vulkan-build \
+    && ninja -C /tmp/libapplegfx-vulkan-build install
 
-RUN curl -sL https://download.qemu.org/qemu-${QEMU_VERSION}.tar.xz | tar xJ -C /tmp \
+# ---------------------------------------------------------------------------
+# QEMU 10.2.2 upstream — pinned, so this ADD effectively never invalidates
+# unless QEMU_VERSION changes. Still uses ADD (not curl) for consistency
+# with the pattern above and so buildx can pre-fetch in parallel.
+# ---------------------------------------------------------------------------
+ADD https://download.qemu.org/qemu-10.2.2.tar.xz /tmp/qemu-upstream.tar.xz
+
+# ---------------------------------------------------------------------------
+# mos-qemu patches — this is the one that matters. A push to mos-qemu's
+# main branch changes the tarball hash, invalidates this ADD layer, and
+# triggers the patch+build RUN below. Prior to the ADD conversion, buildx
+# would cache on the literal curl command string and silently ignore
+# pushes — we burnt ~20 min on that today.
+# ---------------------------------------------------------------------------
+ADD https://github.com/MattJackson/mos-qemu/archive/refs/heads/main.tar.gz /tmp/mos-qemu.tar.gz
+
+# ---------------------------------------------------------------------------
+# Extract QEMU, overlay mos-qemu patches, configure, build, install.
+#
+# Out-of-tree build into /tmp/qemu-build (cache-mounted) so .o files persist
+# across builds. When mos-qemu pushes change only one or two files, make /
+# ninja's dependency tracking recompiles only the affected TUs — full 3-min
+# rebuild collapses to ~60-70 s (measured 2026-04-20).
+#
+# Re-extract upstream every build: tar preserves tarball-stored mtimes, so
+# source files have stable mtimes run-to-run, which does NOT defeat
+# incremental compilation. Patched mos-qemu files get a fresh "now" mtime
+# from cp, which is exactly the signal make/ninja need to rebuild only
+# affected TUs. This is a correctness-over-cleverness choice: a cache-mounted
+# source tree would keep stale patches when mos-qemu removes a file that it
+# used to patch. Re-extraction guarantees pristine upstream.
+#
+# ccache provides a second layer of reuse: if the cache mount is cold (fresh
+# builder, pruned cache) but ccache still has entries, we still win on
+# identical preprocessed inputs. CCACHE_BASEDIR + sloppiness flags above
+# are load-bearing — without them ccache hits <2% on QEMU.
+# ---------------------------------------------------------------------------
+RUN --mount=type=cache,target=/root/.ccache \
+    --mount=type=cache,target=/tmp/qemu-build \
+    rm -rf /tmp/qemu-${QEMU_VERSION} /tmp/mos-qemu \
+    && tar xJ -C /tmp -f /tmp/qemu-upstream.tar.xz \
+    && mkdir -p /tmp/mos-qemu \
+    && tar xz -C /tmp/mos-qemu --strip-components=1 -f /tmp/mos-qemu.tar.gz \
     && cd /tmp/qemu-${QEMU_VERSION} \
-    && curl -sL https://github.com/MattJackson/mos-qemu/archive/refs/heads/main.tar.gz | tar xz -C /tmp \
-    && cp /tmp/mos-qemu-main/hw/misc/applesmc.c hw/misc/applesmc.c \
-    && cp /tmp/mos-qemu-main/hw/display/vmware_vga.c hw/display/vmware_vga.c \
-    && cp /tmp/mos-qemu-main/hw/usb/dev-hid.c hw/usb/dev-hid.c \
-    && cp /tmp/mos-qemu-main/hw/display/apple-gfx-pci-linux.c hw/display/ \
-    && cp /tmp/mos-qemu-main/hw/display/apple-gfx-common-linux.c hw/display/ \
-    && cp /tmp/mos-qemu-main/hw/display/apple-gfx-linux.h hw/display/ \
-    && cp /tmp/mos-qemu-main/hw/display/meson.build hw/display/meson.build \
-    && cp /tmp/mos-qemu-main/hw/display/trace-events hw/display/trace-events \
-    && cp /tmp/mos-qemu-main/hw/display/Kconfig hw/display/Kconfig \
-    && cp /tmp/mos-qemu-main/pc-bios/meson.build pc-bios/meson.build \
-    && cp /tmp/mos-qemu-main/pc-bios/apple-gfx-pci.rom pc-bios/apple-gfx-pci.rom \
-    && ./configure \
+    && cp /tmp/mos-qemu/hw/misc/applesmc.c hw/misc/applesmc.c \
+    && cp /tmp/mos-qemu/hw/display/vmware_vga.c hw/display/vmware_vga.c \
+    && cp /tmp/mos-qemu/hw/usb/dev-hid.c hw/usb/dev-hid.c \
+    && cp /tmp/mos-qemu/hw/display/apple-gfx-pci-linux.c hw/display/ \
+    && cp /tmp/mos-qemu/hw/display/apple-gfx-common-linux.c hw/display/ \
+    && cp /tmp/mos-qemu/hw/display/apple-gfx-linux.h hw/display/ \
+    && cp /tmp/mos-qemu/hw/display/meson.build hw/display/meson.build \
+    && cp /tmp/mos-qemu/hw/display/trace-events hw/display/trace-events \
+    && cp /tmp/mos-qemu/hw/display/Kconfig hw/display/Kconfig \
+    && cp /tmp/mos-qemu/pc-bios/meson.build pc-bios/meson.build \
+    && cp /tmp/mos-qemu/pc-bios/apple-gfx-pci.rom pc-bios/apple-gfx-pci.rom \
+    && cd /tmp/qemu-build \
+    && /tmp/qemu-${QEMU_VERSION}/configure \
         --target-list=x86_64-softmmu \
         --prefix=/usr \
         --enable-kvm \
@@ -74,7 +169,8 @@ RUN curl -sL https://download.qemu.org/qemu-${QEMU_VERSION}.tar.xz | tar xJ -C /
         --disable-debug-info \
         --disable-werror \
     && make -j$(nproc) \
-    && make DESTDIR=/tmp/qemu-install install
+    && make DESTDIR=/tmp/qemu-install install \
+    && ccache -s || true
 
 # Final image — layer order: alpine → recovery → qemu → ovmf → opencore → launch
 FROM alpine:3.21
