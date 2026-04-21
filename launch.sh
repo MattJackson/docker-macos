@@ -225,7 +225,6 @@ exec qemu-system-x86_64 -m "${RAM_MB_STR}" \
     -chardev socket,id=hmp_sock,path="${HMP_SOCK}",server=on,wait=off \
     -monitor chardev:hmp_sock \
     -qmp unix:"${QMP_SOCK}",server=on,wait=off \
-    -display none \
     -vnc 127.0.0.1:1 \
     -vga none \
     -device vmware-svga,vgamem_mb="${VGAMEM_MB:-512}" \
