@@ -37,13 +37,13 @@ git clone https://github.com/MattJackson/mos-qemu
 
 ## Step 2 — Get the macOS recovery image
 
-You need an Apple recovery image (`sequoia_recovery.img`, ~3.2 GB) to install macOS into the VM the first time. Apple doesn't distribute these directly — common path:
+You need an Apple recovery image (~3.2 GB) to install macOS into the VM the first time. Apple doesn't distribute these directly — common path:
 
-1. From a real Mac running Sequoia, run [`Macrecovery.py`](https://github.com/acidanthera/OpenCorePkg/blob/master/Utilities/macrecovery/macrecovery.py) (in OpenCore's Utilities/) to download the recovery DMG
-2. Convert: `dmg2img recovery.dmg sequoia_recovery.img`
-3. Drop it at `docker-macos/sequoia_recovery.img`
+1. From a real Mac running Sequoia, run [`macrecovery.py`](https://github.com/acidanthera/OpenCorePkg/blob/master/Utilities/macrecovery/macrecovery.py) (in OpenCore's Utilities/) to download the recovery DMG
+2. Convert: `dmg2img recovery.dmg recovery.img`
+3. Drop it at `docker-macos/volumes/recovery.img`
 
-This image is referenced by the Dockerfile (`COPY sequoia_recovery.img`) and by `launch.sh` (used in install mode when `mac_hdd_ng.img` is empty).
+This image is bind-mounted into the container at runtime (see `docker-compose.yml`: `./volumes/recovery.img:/opt/macos/recovery.img:ro`) and used by `launch.sh` in install mode when `volumes/disk.img` is empty. It is **not** baked into the image — see `volumes/README.md` for the rationale.
 
 ## Step 3 — Build the OpenCore EFI image
 
@@ -77,41 +77,59 @@ cd ~/mos/docker-macos
 # Output: builds/mos15_<timestamp>.img + mos15.img symlink
 ```
 
-Copy this somewhere the Dockerfile can find it as `OpenCore.img`:
+Copy the built image into `volumes/` where the compose bind-mount expects it:
 
 ```bash
-cp mos15.img OpenCore.img
+cp mos15.img volumes/opencore.img
 ```
 
-(This duplication is on the cleanup list — see [docker-macos issues](https://github.com/MattJackson/mos-docker/issues).)
+Or point `setup.sh` at it with `OPENCORE_SRC=$(pwd)/mos15.img ./setup.sh`.
 
-## Step 4 — Build the container image
+The compose file bind-mounts `./volumes/opencore.img:/opt/macos/OpenCore.img:ro` at runtime. This image is **not** baked into the container — rebuilding OpenCore does not require `docker build`.
+
+## Step 4 — Stage volumes and build the container image
 
 ```bash
 cd ~/mos/docker-macos
+./setup.sh                # stages ./volumes/{disk.img,recovery.img,opencore.img}
 docker compose build
 ```
 
-This:
-- Builds QEMU 10.2.2 inside Alpine 3.21 (musl) with our `qemu-mos15` patches
-- Bundles `OpenCore.img` and `sequoia_recovery.img` into the runtime image
-- Takes ~10–20 minutes the first time, ~2 minutes for subsequent builds (cached layers)
+`setup.sh` is idempotent. On a fresh clone it:
+- creates `volumes/`, `logs/`, `run/`
+- touches `volumes/disk.img` empty (`launch.sh` sizes it to `DISK_SIZE` on first boot)
+- fetches `volumes/recovery.img` from `$RECOVERY_URL` if set, otherwise prints instructions
+- copies `volumes/opencore.img` from `$OPENCORE_SRC` if set, otherwise prints instructions
+- exits 0 only once all three are staged
 
-## Step 5 — Configure your network interface
+`docker compose build`:
+- Builds QEMU 10.2.2 inside Alpine 3.21 (musl) with our `mos-qemu` patches
+- Builds `libapplegfx-vulkan` in the builder stage and copies the `.so` into the runtime image
+- **Does not** bake recovery.img or opencore.img into the image (runtime bind-mounts)
+- Takes ~10–20 minutes the first time, ~2 minutes for subsequent builds
 
-Edit `docker-compose.yml`:
+## Step 5 — Network interface (usually automatic)
+
+`launch.sh` auto-detects the first UP non-virtual NIC on the host. No configuration needed on single-NIC machines.
+
+Set `HOST_IFACE` explicitly only if:
+- the host has multiple physical NICs and the wrong one is picked
+- you want to pin to a specific interface for reproducibility
+
+Edit `docker-compose.yml` or export in the shell:
 
 ```yaml
 environment:
-  - HOST_IFACE=enp1s0     # ← change to your actual interface name
+  - HOST_IFACE=enp1s0
 ```
 
-The default in `launch.sh` is `enp131s0f0` (specific to our hardware). On most machines this is `eth0`, `enp1s0`, or similar — find with `ip addr show` and pick the one that has your IP.
+Find candidates with `ip -br link show`.
 
 ## Step 6 — First boot (install mode)
 
+`setup.sh` already materialised `volumes/disk.img` empty, so `launch.sh` auto-enters install mode on the first `docker compose up`:
+
 ```bash
-touch mac_hdd_ng.img        # empty file; launch.sh detects this and triggers install mode
 docker compose up
 ```
 
@@ -200,8 +218,9 @@ For QEMU patches (`qemu-mos15` changes), see `docs/qemu-mos15-build.md` — fast
 
 | Symptom | Cause | Fix |
 |---|---|---|
-| `docker compose build` fails copying `sequoia_recovery.img` | File missing | Get the image (see Step 2) |
-| `docker compose build` fails copying `OpenCore.img` | Not built yet | Run `./build-mos15-img.sh && cp mos15.img OpenCore.img` |
+| `docker compose up` crashes with `IMAGE_PATH '/image' is a directory` | `volumes/disk.img` missing; docker auto-created a dir | `rm -rf volumes/disk.img && ./setup.sh` |
+| `launch.sh: ERROR: could not auto-detect a physical host interface` | All NICs filtered out (bridged-only host, etc) | Set `HOST_IFACE=<name>` in compose or shell; find with `ip -br link show` |
+| `launch.sh: ERROR: host interface 'X' not found` | `HOST_IFACE` points at a non-existent NIC | Unset HOST_IFACE (auto-detect) or correct the name |
 | Container restarts every 30s | QEMU launch failing | `docker compose logs macos` — common: wrong network interface, missing `/dev/kvm` access, bad bind mount |
 | VM hangs at Apple logo for >5 min | Likely SMC retry storm or ACPI issue | Check `docker compose logs macos | grep -i panic` |
 | Bash error about `glibc` / `ld-linux-x86-64.so.2 not found` | QEMU was built on glibc but container is musl Alpine | Rebuild — see `docs/qemu-mos15-build.md` |
@@ -209,11 +228,15 @@ For QEMU patches (`qemu-mos15` changes), see `docs/qemu-mos15-build.md` — fast
 
 ## Future cleanup
 
-This bootstrap is more involved than `docker compose up`. Open items to make it shorter:
+This bootstrap is still more involved than `docker compose up`. Open items to shorten it further:
 
-1. Pre-built container images on a public registry → skip Step 4
-2. Auto-build OpenCore.img if missing → skip Step 3c
-3. Auto-detect HOST_IFACE → skip Step 5
-4. Bake the Admin.plist fix into the OpenCore image build → skip the patch in Step 6
+1. Pre-built container images on a public registry → skip `docker compose build`
+2. Auto-build `opencore.img` in a dedicated macOS-host CI job → skip manual Step 3c
+3. Bake the Admin.plist fix into the `build-mos15-img.sh` pipeline → skip the patch in Step 6
+
+Done (no longer on the list):
+- ~~Auto-detect HOST_IFACE~~ (launch.sh picks the first UP non-virtual NIC)
+- ~~`./volumes/` convention for runtime artifacts~~ (setup.sh + compose bind-mounts)
+- ~~`setup.sh` idempotent first-run staging~~
 
 Tracked in repo issues / TODO.

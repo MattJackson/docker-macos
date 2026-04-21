@@ -90,6 +90,28 @@ For the deploy walk-through with expected pass/fail signals, see [`docs/test-run
 - **macOS host** (Apple Silicon or Intel) with Xcode CLI tools — needed for kext cross-compilation and the host-side Metal/CG probes in `tests/`
 - A built macOS install image (initial install is a separate process — recovery image + manual installer run; pipeline starts after install)
 
+## First-time setup
+
+On the Linux host, from a fresh clone:
+
+```bash
+./setup.sh                  # stages ./volumes/ with disk.img (empty), plus
+                            # prompts for recovery.img + opencore.img
+
+# Follow any WARN: output from setup.sh (produce recovery.img via
+# macrecovery.py + dmg2img; build opencore.img via ./build-mos15-img.sh
+# on a macOS host, then copy it over). Rerun setup.sh -- it's idempotent
+# and exits 0 only when ./volumes/ is fully staged.
+
+docker compose build        # Alpine + QEMU 10.2.2 + libapplegfx-vulkan + OVMF
+docker compose up -d
+docker logs -f mos-docker-macos-1
+```
+
+`volumes/README.md` documents every file under `volumes/` (what it is, where
+to get it, expected size). `setup.sh --help`... actually there's no help
+flag, read the top of `setup.sh` for environment-variable overrides.
+
 ## Configuration
 
 Runtime knobs are set via environment variables in `docker-compose.yml`. The
@@ -103,7 +125,7 @@ default without editing the file.
 | `CORES` | `16` | vCPU cores per socket. |
 | `DISK_SIZE` | `256G` | Disk size on first launch. |
 | `VGAMEM_MB` | `512` | VMware SVGA framebuffer VRAM (capped at 512 MB device-side). |
-| `HOST_IFACE` | `eth0` | Host NIC for macvtap bridge; find with `ip addr show`. |
+| `HOST_IFACE` | auto-detect | Host NIC for the macvtap bridge. Leave unset to let `launch.sh` pick the first UP non-virtual interface (skips `lo`, `docker0`, `br-*`, `veth*`, `macvtap*`, `virbr*`, `tailscale*`). Set explicitly on multi-NIC hosts. |
 | `GPU_CORES` | `0` | Lavapipe worker-thread budget for the apple-gfx-pci display (see below). |
 | `LOG_DIR` | `/data/logs` | In-container path for per-boot serial logs. Host path via compose volume: `./logs/`. |
 | `RUN_DIR` | `/data/run` | In-container path for the QEMU HMP + QMP unix sockets. Host path via compose volume: `./run/`. |

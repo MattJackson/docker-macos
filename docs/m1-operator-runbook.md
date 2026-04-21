@@ -27,8 +27,9 @@ Before you sit down. All must be true.
   from GitHub, not local trees. Run
   `git -C /Users/mjackson/libapplegfx-vulkan push && git -C /Users/mjackson/qemu-mos15 push`.
 - [ ] Docker engine up on the host (`systemctl status docker` via SSH).
-- [ ] `sequoia_recovery.img` (~3.2 GB) and `OpenCore.img` already in
-  `~/mos/docker-macos/` on the host. See `SETUP.md` step 2.
+- [ ] `./setup.sh` has been run in `~/mos/docker-macos/` and
+  `volumes/recovery.img` (~3.2 GB) + `volumes/opencore.img` (~512 MB)
+  are staged. See `volumes/README.md` and `SETUP.md` step 2.
 - [ ] Optional: `vulkaninfo --summary` on the host shows a lavapipe
   ICD line. Helpful but not load-bearing — the container ships its
   own lavapipe.
