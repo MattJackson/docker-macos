@@ -86,15 +86,40 @@ echo "Monitor socket (HMP):   ${HMP_SOCK}"
 echo "QMP socket:             ${QMP_SOCK}"
 echo "  -> from host: socat - unix:\$(pwd)/run/qemu-monitor.sock"
 
-# Detect install vs running mode
-CURRENT_SIZE=$(stat -c%s "${IMAGE_PATH}" 2>/dev/null || echo 0)
+# ---------------------------------------------------------------------------
+# Install vs boot mode.
+#
+# Contract: IMAGE_PATH is a bind-mounted file on the host (see
+# docker-compose.yml: ./volumes/disk.img:/image). It must be a regular file
+# — if it's missing, a directory, or otherwise unusable we fail loudly
+# rather than silently racing qemu-img against a bind-mount that docker
+# already materialised as an empty directory (the classic footgun when the
+# host path doesn't exist: docker creates a directory at the mount point).
+#
+# Install mode is triggered by an empty or tiny (<1 MiB) regular file. The
+# operator creates `./volumes/disk.img` empty via setup.sh; launch.sh then
+# qemu-img's it up to $DISK_SIZE on first boot and attaches the recovery
+# image as InstallMedia.
+# ---------------------------------------------------------------------------
 INSTALL_MEDIA=""
-if [[ "${CURRENT_SIZE}" -lt 1048576 ]]; then
-    echo "Empty disk — install mode"
+if [ ! -e "${IMAGE_PATH}" ]; then
+    echo "launch.sh: ERROR: IMAGE_PATH '${IMAGE_PATH}' does not exist." >&2
+    echo "  Run ./setup.sh on the host to stage ./volumes/disk.img." >&2
+    exit 1
+fi
+if [ -d "${IMAGE_PATH}" ]; then
+    echo "launch.sh: ERROR: IMAGE_PATH '${IMAGE_PATH}' is a directory." >&2
+    echo "  Docker created a directory at the bind-mount target because the" >&2
+    echo "  host-side file does not exist. Remove it, then run ./setup.sh." >&2
+    exit 1
+fi
+CURRENT_SIZE=$(stat -c%s "${IMAGE_PATH}" 2>/dev/null || echo 0)
+if [ "${CURRENT_SIZE}" -lt 1048576 ]; then
+    echo "Empty disk (${CURRENT_SIZE} bytes) -- install mode"
     qemu-img create -f raw "${IMAGE_PATH}" "${DISK_SIZE:-256G}"
     INSTALL_MEDIA="-drive id=InstallMedia,if=none,file=/opt/macos/recovery.img,format=raw -device ide-hd,bus=sata.3,drive=InstallMedia"
 else
-    echo "Boot mode"
+    echo "Boot mode (disk ${CURRENT_SIZE} bytes)"
 fi
 
 # ---------------------------------------------------------------------------
@@ -117,8 +142,42 @@ MEM_BACKEND="memory-backend-memfd,id=mem,size=${RAM_MB_STR}M,share=on"
 echo "Memory backend: memfd (share=on), size=${RAM_MB_STR}M"
 echo "  -> required by apple-gfx-pci mremap-alias path for Phase 2 coherence"
 
-# Bridged networking via macvtap
-HOST_IFACE="${HOST_IFACE:-enp131s0f0}"
+# ---------------------------------------------------------------------------
+# Bridged networking via macvtap.
+#
+# Interface selection:
+#   1. If HOST_IFACE is explicitly set in the environment (compose file,
+#      shell export), use it. Required for hosts with multiple physical NICs
+#      where the operator wants to pin a specific one.
+#   2. Otherwise auto-detect: first "UP" physical interface — not loopback,
+#      not docker0, not a bridge (br-*), not a veth pair, not macvtap itself.
+#      This Just Works on most single-NIC servers (eth0, enp1s0, enp131s0f0,
+#      ens18, etc) and avoids hardcoding any particular interface name.
+#
+# If nothing is found we exit loudly — silent fallback to "eth0" (or any
+# hardcoded name) is what was biting us before this block landed.
+# ---------------------------------------------------------------------------
+if [ -z "${HOST_IFACE:-}" ]; then
+    HOST_IFACE="$(ip -br link show 2>/dev/null | \
+        awk '$1 !~ /^(lo|docker|br-|veth|macvtap|virbr|tailscale)/ && \
+             $1 != "" && $2 == "UP" {print $1; exit}')"
+    if [ -z "${HOST_IFACE}" ]; then
+        echo "launch.sh: ERROR: could not auto-detect a physical host interface." >&2
+        echo "  Available interfaces:" >&2
+        ip -br link show >&2
+        echo "  Set HOST_IFACE=<name> in docker-compose.yml or the environment." >&2
+        exit 1
+    fi
+    echo "Host interface (auto-detected): ${HOST_IFACE}"
+else
+    echo "Host interface (from HOST_IFACE env): ${HOST_IFACE}"
+fi
+if ! ip link show "${HOST_IFACE}" >/dev/null 2>&1; then
+    echo "launch.sh: ERROR: host interface '${HOST_IFACE}' not found." >&2
+    echo "  Available interfaces:" >&2
+    ip -br link show >&2
+    exit 1
+fi
 ip link del macvtap0 2>/dev/null || true
 ip link add link "${HOST_IFACE}" name macvtap0 type macvtap mode bridge
 ip link set macvtap0 allmulticast on
