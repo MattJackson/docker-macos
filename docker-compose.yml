@@ -29,6 +29,13 @@ services:
       #   Measured scaling curve: mos/memory/project_tunable_gpu_cores.md
       #   Device-side docs:      docs/qemu-mos15-build.md#tuning-gpu_cores-on-the-apple-gfx-pci-device
       - GPU_CORES=${GPU_CORES:-0}
+      # libapplegfx-vulkan (host paravirt GPU library) M3 debugging knobs.
+      # All default to empty/0 — production leaves them unset. Set ad-hoc via
+      # shell env when iterating on stamp-page / MSI-X behavior.
+      - LAGFX_LOG=${LAGFX_LOG:-1}            # 1 = verbose protocol decoder logging
+      - LAGFX_STAMP_SLOT=${LAGFX_STAMP_SLOT:-0}   # 0..7: which stamp cell offset (id*4) in FIFO page 0
+      - LAGFX_IRQ_VECTOR=${LAGFX_IRQ_VECTOR:-0}   # 0..N-1: MSI-X vector to raise on command completion
+      - LAGFX_STAMP_VALUE=${LAGFX_STAMP_VALUE:-}  # override monotonic counter with constant; strtoul (e.g. 0xFFFFFFFF)
       - LOG_DIR=/data/logs                 # Where launch.sh writes per-boot serial logs. Host path: ./logs/
       - RUN_DIR=/data/run                  # Where launch.sh binds the HMP + QMP unix sockets. Host path: ./run/
     volumes:
