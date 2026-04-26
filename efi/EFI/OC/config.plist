@@ -947,7 +947,7 @@
 				Rg==
 				</data>
 				<key>boot-args</key>
-				<string>keepsyms=1 kext-dev-mode=1 serial=3 -liludbgall amfi_get_out_of_my_way=1 debug=0x44 kdp_match_name=en0 kcsuffix=development wdt=-1 -v</string>
+				<string>keepsyms=1 kext-dev-mode=1 serial=3 -liludbgall amfi_get_out_of_my_way=1 debug=0x44 kdp_match_name=en0 -v</string>
 				<key>csr-active-config</key>
 				<data>
 				dwgAAA==
