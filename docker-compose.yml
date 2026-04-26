@@ -32,7 +32,12 @@ services:
       # libapplegfx-vulkan (host paravirt GPU library) M3 debugging knobs.
       # All default to empty/0 — production leaves them unset. Set ad-hoc via
       # shell env when iterating on stamp-page / MSI-X behavior.
-      - LAGFX_LOG=${LAGFX_LOG:-1}            # 1 = verbose protocol decoder logging
+      # LAGFX_LOG_LEVEL controls decoder logging volume:
+      #   warn (default) — warnings + errors only; right for prod / runtime
+      #   info           — per-task / per-display lifecycle events
+      #   trace          — per-cmd / per-translate / per-MMIO (RE only)
+      # LAGFX_LOG=1 retained for back-compat (== info).
+      - LAGFX_LOG_LEVEL=${LAGFX_LOG_LEVEL:-warn}
       - LAGFX_STAMP_SLOT=${LAGFX_STAMP_SLOT:-0}   # 0..7: which stamp cell offset (id*4) in FIFO page 0
       - LAGFX_IRQ_VECTOR=${LAGFX_IRQ_VECTOR:-0}   # 0..N-1: MSI-X vector to raise on command completion
       - LAGFX_STAMP_VALUE=${LAGFX_STAMP_VALUE:-}  # override monotonic counter with constant; strtoul (e.g. 0xFFFFFFFF)
