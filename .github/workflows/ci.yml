@@ -95,7 +95,14 @@ jobs:
           # Alpine base tag, not individual apks. DL3018 same reasoning.
           # DL3059 (multiple consecutive RUN) — intentional for Docker layer
           # cache granularity; see Dockerfile comments.
-          ignore: DL3008,DL3018,DL3059
+          # DL3006 (tag base image) — the artifact FROMs are ARG-templated
+          # (${MOSQEMU_IMAGE}/${OEM_QEMU_IMAGE}) with tagged defaults
+          # (:main / :11.0.0); hadolint can't see through the ARG.
+          # DL3003 (use WORKDIR) — the OpenCore.img builder `cd`s into per-
+          # dir loop bodies inside a single RUN; WORKDIR can't express that.
+          # DL4006 (SHELL pipefail) — the img-build RUN's pipe is a best-
+          # effort `mmd ... || true` loop; a failing pipe is non-fatal here.
+          ignore: DL3008,DL3018,DL3059,DL3006,DL3003,DL4006
           failure-threshold: warning
 
   # -------------------------------------------------------------------------
