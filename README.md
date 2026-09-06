@@ -1,5 +1,10 @@
 # mos-docker
 
+[![CI](https://github.com/MattJackson/mos-docker/actions/workflows/ci.yml/badge.svg)](https://github.com/MattJackson/mos-docker/actions/workflows/ci.yml)
+[![Release](https://img.shields.io/github/v/release/MattJackson/mos-docker?display_name=tag&sort=semver)](https://github.com/MattJackson/mos-docker/releases)
+[![License: MIT](https://img.shields.io/badge/license-MIT-blue.svg)](LICENSE)
+[![Container](https://img.shields.io/badge/ghcr.io-mos--docker-2496ED?logo=docker&logoColor=white)](https://github.com/MattJackson/mos-docker/pkgs/container/mos-docker)
+
 Run macOS Sequoia in a Docker container on Linux + KVM. Two commands from a fresh host:
 
 ```bash
@@ -111,6 +116,21 @@ These are direct lessons from [an incident](docs/incidents/2026-05-06-disk-wipe.
 - ≥ 32 GB RAM (16 GB for the VM at runtime + headroom)
 - ≥ 300 GB free disk (256 GB sparse install + builds + recovery)
 - Optional: discrete GPU for any host-side GUI you want to keep responsive while the VM runs
+
+## Contributing
+
+Contributions are welcome. See [CONTRIBUTING.md](CONTRIBUTING.md) for how to get
+started, and [CODE_OF_CONDUCT.md](CODE_OF_CONDUCT.md) for community expectations.
+CI (`ci.yml`) runs on every push and pull request.
+
+## Security
+
+Please report vulnerabilities privately. See [SECURITY.md](SECURITY.md) for the
+disclosure process.
+
+## Changelog
+
+Release history is tracked in [CHANGELOG.md](CHANGELOG.md).
 
 ## License
 
